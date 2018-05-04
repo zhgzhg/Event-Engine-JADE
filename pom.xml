@@ -149,7 +149,7 @@
         </dependency>
 
         <dependency>
-            <groupId>com.tilab.jade</groupId>
+            <groupId>com.github.zhgzhg.mirror.tilab.jade</groupId>
             <artifactId>jade</artifactId>
             <version>${jade-version}</version>
         </dependency>
