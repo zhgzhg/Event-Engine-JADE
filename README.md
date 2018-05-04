@@ -1,6 +1,8 @@
 Event Engine for JADE
 =====================
 
+![build status badge](https://travis-ci.org/zhgzhg/Event-Engine-JADE.svg?branch=master "Build Status")
+
 Library providing implementation for event broker agents, behaviours and event serialization utilities used for
 distribution of events into JADE multi-agent environments.
 This project utilizes [Event Engine](https://github.com/zhgzhg/Event-Engine "Event Engine") library - the core component
