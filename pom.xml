@@ -124,6 +124,39 @@
                 </plugins>
             </build>
         </profile>
+
+        <profile>
+            <id>jade-with-test-client-agent</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>${exec-maven-plugin-version}</version>
+                        <configuration>
+                            <addOutputToClasspath>true</addOutputToClasspath>
+                            <executable>java</executable>
+                            <mainClass>jade.Boot</mainClass>
+                            <additionalClasspathElements>
+                                <additionalClasspathElement>${project.build.testOutputDirectory}</additionalClasspathElement>
+                            </additionalClasspathElements>
+                            <arguments>
+                                <argument>-gui</argument>
+                                <argument>-agents</argument>
+                                <argument>EventClientAgent0:test.pseudo.EventClientAgent;EventBrokerAgent0:net.uniplovdiv.fmi.cs.vrs.jade.agent.EventBrokerAgent(--config=${project.build.outputDirectory}/dispatcher.properties)</argument>
+                            </arguments>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>java</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
     <dependencies>

@@ -43,3 +43,7 @@ Execution
 The default event distribution agent can be executed though maven:
 
     `mvn exec:java -P jade-agent`
+    
+A very simple event client agent with the default event distribution agent can be executed through maven as well:
+
+    `mvn exec:java -P jade-with-test-client-agent`
