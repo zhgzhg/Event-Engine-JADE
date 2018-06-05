@@ -80,7 +80,10 @@ public class BEventChannel extends TickerBehaviour {
                                     MessageTemplate.MatchPerformative(ACLMessage.CONFIRM),
                                     MessageTemplate.or(
                                             MessageTemplate.MatchPerformative(ACLMessage.FAILURE),
-                                            MessageTemplate.MatchPerformative(ACLMessage.NOT_UNDERSTOOD)
+                                            MessageTemplate.or(
+                                                    MessageTemplate.MatchPerformative(ACLMessage.NOT_UNDERSTOOD),
+                                                    MessageTemplate.MatchPerformative(ACLMessage.REFUSE)
+                                            )
                                     )
                             )
                     )
@@ -355,7 +358,8 @@ public class BEventChannel extends TickerBehaviour {
                 }
             });
 
-            // EventBrokerAgent - receive events from normal agents as ordinary messages and proxy them to the broker
+            // EventBrokerAgent - receive events from normal (subscribed) agents as ordinary messages and proxy them
+            // to the broker (real system)
             EventData ed = this.receiveEventMsg();
             if (ed != null && ed.getSource() != null && ed.getData() != null) {
                 EventBrokerAgent.SubscriberData sd = this.myEventBrokerAgent.getSubscriberDataForAid(ed.getSource());
@@ -608,15 +612,24 @@ public class BEventChannel extends TickerBehaviour {
                     Concept action = ((Result) ce).getAction();
                     Object value = ((Result) ce).getValue();
                     if (action instanceof AExchangeEvent && value instanceof EventData) {
-                        // confirm the message is received
-                        resp.setPerformative(ACLMessage.CONFIRM);
-                        resp.setReplyWith(null);
-                        agent.send(resp);
+                        EventData ed = (EventData) value;
+                        AID src = ed.getSource();
+                        if (src != null && myEventBrokerAgent.getSubscriberDataForAid(src) != null) {
+                            // confirm the message is received
+                            resp.setPerformative(ACLMessage.CONFIRM);
+                            resp.setReplyWith(null);
+                            agent.send(resp);
 
-                        List<byte[]> data = ((EventData) value).getData();
-                        if (data != null && !data.isEmpty()) {
-                            ((EventData) value).setSource(msg.getSender());
-                            return (EventData) value;
+                            List<byte[]> data = ((EventData) value).getData();
+                            if (data != null && !data.isEmpty()) {
+                                ((EventData) value).setSource(msg.getSender());
+                                return (EventData) value;
+                            }
+                        } else {
+                            // confirm the message is received, but since the agent is not subscriber we deny it
+                            resp.setPerformative(ACLMessage.REFUSE);
+                            resp.setReplyWith(null);
+                            agent.send(resp);
                         }
                     } else {
                         // confirm the message is received, but not supported
