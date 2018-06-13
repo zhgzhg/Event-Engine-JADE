@@ -61,8 +61,10 @@ public class BEventBrokerSubscriber extends Behaviour {
     private YellowPagesUtils yup;
     private SubscriptionParameter sp;
     private AID chosenEventSourceAgent;
+    private long lastSubscriptionTimestamp;
     private boolean hasSubscribed = false;
     private boolean isDone = false;
+    private LinkedHashSet<AID> lastFailedSubscrProviders;
 
     private short maxPingAttempts = 5;
     private short currentPingAttempt = 0;
@@ -143,6 +145,8 @@ public class BEventBrokerSubscriber extends Behaviour {
         ContentManager cm = agent.getContentManager();
         cm.registerOntology(EventEngineOntology.getInstance());
         cm.registerOntology(JADEManagementOntology.getInstance());
+
+        this.lastFailedSubscrProviders = new LinkedHashSet<>();
     }
 
     /**
@@ -220,7 +224,7 @@ public class BEventBrokerSubscriber extends Behaviour {
             agent.getContentManager().fillContent(msg, act);
             agent.send(msg);
 
-            ACLMessage recvMsg = agent.blockingReceive(acceptedMessages, 60000);
+            ACLMessage recvMsg = agent.blockingReceive(acceptedMessages, 60000L);
             if (recvMsg != null) {
                 MessageTemplate ok = MessageTemplate.and(
                         MessageTemplate.MatchSender(agentId),
@@ -271,6 +275,7 @@ public class BEventBrokerSubscriber extends Behaviour {
             if (msg != null) {
                 this.hasSubscribed = false;
                 setChosenEventSourceAgent(null);
+                this.lastFailedSubscrProviders.add(sender);
                 return true;
             }
         }
@@ -311,13 +316,13 @@ public class BEventBrokerSubscriber extends Behaviour {
             if (!this.hasSubscribed) {
                 this.blocked = true;
                 this.wakeupTime = System.currentTimeMillis() + 20000L;
-                block(this.wakeupTime);
+                block(20000L);
             }
         } else { // check whether the subscribed agent is alive
             if (checkAndExecuteRemoteUnsubscribeRequests()) {
                 this.blocked = true;
                 this.wakeupTime = System.currentTimeMillis() + 20000L;
-                block(this.wakeupTime);
+                block(20000L);
                 return;
             }
 
@@ -330,7 +335,7 @@ public class BEventBrokerSubscriber extends Behaviour {
                 // the agent is alive. Check once again after a minute.
                 this.blocked = true;
                 this.wakeupTime = System.currentTimeMillis() + 60000L;
-                block(this.wakeupTime);
+                block(60000L);
             }
         }
     }
@@ -342,6 +347,7 @@ public class BEventBrokerSubscriber extends Behaviour {
         // do not attempt subscription if we are (entering) in suspended or deleted state
         int state = getAgent().getAgentState().getValue();
         if (state == Agent.AP_SUSPENDED || state == Agent.AP_DELETED) {
+            this.lastFailedSubscrProviders.clear();
             return;
         }
 
@@ -370,21 +376,45 @@ public class BEventBrokerSubscriber extends Behaviour {
                 if (myContainerIdentifier == null || myContainerIdentifier.equals(contIdentifier)) {
                     if (this.hasSubscribed = subscribeToEventSource(a)) {
                         setChosenEventSourceAgent(a);
+                        this.lastFailedSubscrProviders.clear();
                         break;
+                    } else {
+                        this.lastFailedSubscrProviders.add(a);
                     }
                 } else {
                     subscriptionAlternatives.add(a);
                 }
-
             }
+
 
             if (!hasSubscribed && !subscriptionAlternatives.isEmpty()) {
                 for (AID sa : subscriptionAlternatives) {
+                    if (lastFailedSubscrProviders.contains(sa)) continue; // leave recently failed providers for later
                     if (this.hasSubscribed = subscribeToEventSource(sa)) {
                         setChosenEventSourceAgent(sa);
+                        this.lastFailedSubscrProviders.clear();
                         break;
+                    } else {
+                        this.lastFailedSubscrProviders.add(sa);
                     }
                 }
+
+                // try with recently failed subscription providers starting from those failed earlier in time
+
+                if (!this.hasSubscribed && !this.lastFailedSubscrProviders.isEmpty()) {
+                    AID[] sp = (AID[]) this.lastFailedSubscrProviders.toArray();
+                    for (int i = sp.length - 1; i != -1; i--) {
+                        if (!this.hasSubscribed && (this.hasSubscribed = subscribeToEventSource(sp[i]))) {
+                            setChosenEventSourceAgent(sp[i]);
+                            this.lastFailedSubscrProviders.clear();
+                            break;
+                        } else if (!subscriptionAlternatives.contains(sp[i])) {
+                            // maintain the least favourite alternatives by leaving those that're still online now
+                            this.lastFailedSubscrProviders.remove(sp[i]);
+                        }
+                    }
+                }
+
             }
         }
     }
@@ -394,6 +424,7 @@ public class BEventBrokerSubscriber extends Behaviour {
      * @param aid The agent id to be chosen.
      */
     protected synchronized void setChosenEventSourceAgent(AID aid) {
+        this.lastSubscriptionTimestamp = System.currentTimeMillis();
         this.chosenEventSourceAgent = aid;
     }
 
@@ -403,6 +434,14 @@ public class BEventBrokerSubscriber extends Behaviour {
      */
     public synchronized AID getChosenEventSourceAgent() {
         return this.chosenEventSourceAgent;
+    }
+
+    /**
+     * Returns the Unix epoch time in milliseconds when the last successful subscription was done.
+     * @return Unix epoch time in milliseconds of the last successful subscription or 0 if no subscriptions were made.
+     */
+    public synchronized long getLastSubscriptionTimestamp() {
+        return this.lastSubscriptionTimestamp;
     }
 
     /**
@@ -472,7 +511,7 @@ public class BEventBrokerSubscriber extends Behaviour {
     }
 
     /**
-     * Returns agent's max retries count for pinging another agent.
+     * Returns agent's max retries count for pinging another agent. The default value is 5.
      * @return A positive number.
      */
     public short getMaxPingAttempts() {
@@ -492,7 +531,7 @@ public class BEventBrokerSubscriber extends Behaviour {
     }
 
     /**
-     * Returns the maximum time to wait for response during ping.
+     * Returns the maximum time to wait for response during ping. The default value is 200 ms.
      * @return A positive number (greater than 0) describing the time in milliseconds.
      */
     public long getPingTimeoutMs() {
@@ -526,6 +565,7 @@ public class BEventBrokerSubscriber extends Behaviour {
      * @param done Set to true to designate done behaviour or false to not done yet.
      */
     public void setDone(boolean done) {
+        lastFailedSubscrProviders.clear();
         isDone = done;
     }
 }
