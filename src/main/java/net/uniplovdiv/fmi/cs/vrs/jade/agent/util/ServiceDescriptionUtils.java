@@ -72,14 +72,16 @@ public class ServiceDescriptionUtils {
      */
     public static jade.domain.FIPAAgentManagement.Property findFirstPropertyNamed(String name, ServiceDescription sd) {
         if (sd != null) {
-            Iterator propsIterator = sd.getAllProperties();
-            if (propsIterator != null) {
-                while (propsIterator.hasNext()) {
-                    Property p = (Property) propsIterator.next();
-                    if (p != null) {
-                        String pName = p.getName();
-                        if (Objects.equals(name, pName)) {
-                            return p;
+            synchronized (sd) {
+                Iterator propsIterator = sd.getAllProperties();
+                if (propsIterator != null) {
+                    while (propsIterator.hasNext()) {
+                        Property p = (Property) propsIterator.next();
+                        if (p != null) {
+                            String pName = p.getName();
+                            if (Objects.equals(name, pName)) {
+                                return p;
+                            }
                         }
                     }
                 }
@@ -99,15 +101,17 @@ public class ServiceDescriptionUtils {
     @SuppressWarnings("UnusedReturnValue")
     public static Object setFirstPropertyNamed(String name, Object value, ServiceDescription sd) {
         Objects.requireNonNull(sd, "ServiceDescription cannot be null");
-        Property existingProperty = findFirstPropertyNamed(name, sd);
-        if (existingProperty == null) {
-            sd.addProperties(new Property(name, value));
-            return null;
+        synchronized (sd) {
+            Property existingProperty = findFirstPropertyNamed(name, sd);
+            if (existingProperty == null) {
+                sd.addProperties(new Property(name, value));
+                return null;
+            }
+            Object oldValue = existingProperty.getValue();
+            existingProperty.setName(name);
+            existingProperty.setValue(value);
+            return oldValue;
         }
-        Object oldValue = existingProperty.getValue();
-        existingProperty.setName(name);
-        existingProperty.setValue(value);
-        return oldValue;
     }
 
     /**
@@ -119,13 +123,15 @@ public class ServiceDescriptionUtils {
     public static jade.domain.FIPAAgentManagement.Property removeFirstPropertyNamed(String name,
                                                                                     ServiceDescription sd) {
         if (sd != null) {
-            Iterator propsIterator = sd.getAllProperties();
-            if (propsIterator != null) {
-                while (propsIterator.hasNext()) {
-                    Property p = (Property) propsIterator.next();
-                    if (p != null && Objects.equals(name, p.getName())) {
-                        propsIterator.remove();
-                        return p;
+            synchronized (sd) {
+                Iterator propsIterator = sd.getAllProperties();
+                if (propsIterator != null) {
+                    while (propsIterator.hasNext()) {
+                        Property p = (Property) propsIterator.next();
+                        if (p != null && Objects.equals(name, p.getName())) {
+                            propsIterator.remove();
+                            return p;
+                        }
                     }
                 }
             }
