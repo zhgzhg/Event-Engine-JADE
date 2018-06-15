@@ -17,10 +17,10 @@ import java.util.logging.Level;
  * Provides functionality for de/registration in JADE's Directory Facilitator (yellow pages).
  */
 public class YellowPagesUtils {
-    private boolean isRegisteredInDF = false;
+    private volatile boolean isRegisteredInDF = false;
     private Agent agent;
-    private ServiceDescription sd;
-    private DFAgentDescription dfd;
+    private volatile ServiceDescription sd;
+    private volatile DFAgentDescription dfd;
     private final Logger logger;
 
     /**
@@ -71,7 +71,7 @@ public class YellowPagesUtils {
     @SuppressWarnings("UnusedReturnValue")
     public synchronized boolean deregister() {
         try {
-            if (isRegisteredInDF) {
+            if (this.isRegisteredInDF) {
                 // DFService.deregister(this.agent, this.dfd); // too unreliable because it's blocking for long.
                 // Also on suspend the messages don't get received
                 ACLMessage request = DFService.createRequestMessage(this.agent, this.agent.getDefaultDF(),
