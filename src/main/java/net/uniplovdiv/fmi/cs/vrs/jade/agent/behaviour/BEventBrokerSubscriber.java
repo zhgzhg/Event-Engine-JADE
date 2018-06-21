@@ -282,6 +282,23 @@ public class BEventBrokerSubscriber extends Behaviour {
         return false;
     }
 
+    /**
+     * Force unsubscribing from the currently subscribed agent, and restarts the search and subscribe process.
+     * The restarting part does not have effect if the behaviour is flagged as done.
+     * @param makeCurrentPublisherLastChoice When the whole process is restarted, if more than 1 publishers are found
+     *                                       make the one chosen previously before calling this method as last choice.
+     */
+    public void resubscribe(boolean makeCurrentPublisherLastChoice) {
+        AID eSrc;
+        if (this.hasSubscribed && (eSrc = getChosenEventSourceAgent()) != null) {
+            unsubscribeFromEventSource(eSrc);
+            setChosenEventSourceAgent(null);
+            if (makeCurrentPublisherLastChoice) {
+                this.lastFailedSubscrProviders.add(eSrc);
+            }
+        }
+    }
+
     @Override
     public void action() {
         if (isDone) {
