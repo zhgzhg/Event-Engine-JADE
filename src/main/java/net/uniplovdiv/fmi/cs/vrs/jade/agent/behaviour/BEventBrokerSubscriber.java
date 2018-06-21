@@ -60,15 +60,15 @@ public class BEventBrokerSubscriber extends Behaviour {
 
     private YellowPagesUtils yup;
     private SubscriptionParameter sp;
-    private AID chosenEventSourceAgent;
-    private long lastSubscriptionTimestamp;
-    private boolean hasSubscribed = false;
-    private boolean isDone = false;
-    private LinkedHashSet<AID> lastFailedSubscrProviders;
+    private volatile AID chosenEventSourceAgent;
+    private volatile long lastSubscriptionTimestamp;
+    private volatile boolean hasSubscribed = false;
+    private volatile boolean isDone = false;
+    private volatile LinkedHashSet<AID> lastFailedSubscrProviders;
 
-    private short maxPingAttempts = 5;
+    private volatile short maxPingAttempts = 5;
     private short currentPingAttempt = 0;
-    private long pingTimeoutMs = 200;
+    private volatile long pingTimeoutMs = 200;
     private AID aidToPing = null;
 
     private boolean blocked = false;
@@ -206,11 +206,11 @@ public class BEventBrokerSubscriber extends Behaviour {
     }
 
     /**
-     * Subscribes to Event Source agent to receive events powered by Event Engine.
+     * Send subscription request message to Event Source agent - desire to receive events powered by Event Engine.
      * @param agentId The identifier of the agent.
      * @return True if the subscription was successful, otherwise false.
      */
-    private boolean subscribeToEventSource(AID agentId) {
+    private boolean sendSubscribeToEventSourceMsg(AID agentId) {
         ACLMessage msg = new ACLMessage(ACLMessage.SUBSCRIBE);
         Agent agent = getAgent();
         msg.setSender(agent.getAID());
@@ -240,10 +240,10 @@ public class BEventBrokerSubscriber extends Behaviour {
     }
 
     /**
-     * Unsubscribes from Event Source agent in order not to receive events.
+     * Sends request to unsubscribe from Event Source agent - desire not to receive events.
      * @param agentId The identifier of the agent.
      */
-    protected void unsubscribeFromEventSource(AID agentId) {
+    protected void sendUnsubscribeFromEventSourceMsg(AID agentId) {
         Agent agent = getAgent();
         ACLMessage msg = new ACLMessage(ACLMessage.CANCEL);
         msg.setSender(agent.getAID());
@@ -291,7 +291,7 @@ public class BEventBrokerSubscriber extends Behaviour {
     public void resubscribe(boolean makeCurrentPublisherLastChoice) {
         AID eSrc;
         if (this.hasSubscribed && (eSrc = getChosenEventSourceAgent()) != null) {
-            unsubscribeFromEventSource(eSrc);
+            sendUnsubscribeFromEventSourceMsg(eSrc);
             setChosenEventSourceAgent(null);
             if (makeCurrentPublisherLastChoice) {
                 this.lastFailedSubscrProviders.add(eSrc);
@@ -305,7 +305,7 @@ public class BEventBrokerSubscriber extends Behaviour {
             this.blocked = false;
             if (this.hasSubscribed) {
                 AID eSrc = getChosenEventSourceAgent();
-                unsubscribeFromEventSource(eSrc);
+                sendUnsubscribeFromEventSourceMsg(eSrc);
             }
             return;
         }
@@ -328,7 +328,7 @@ public class BEventBrokerSubscriber extends Behaviour {
         }
 
         if (!this.hasSubscribed) {
-            this.subscribeToEventSource();
+            this.sendSubscribeToEventSourceMsg();
 
             if (!this.hasSubscribed) {
                 this.blocked = true;
@@ -347,7 +347,7 @@ public class BEventBrokerSubscriber extends Behaviour {
             if (retrieveContainerIdentifierOfAgent(eSrc) == null || !pingAgent(eSrc)) {
                 // the agent is probably dead. Just in case try sending to it an unsubscribe message.
                 this.hasSubscribed = false;
-                unsubscribeFromEventSource(eSrc);
+                sendUnsubscribeFromEventSourceMsg(eSrc);
             } else {
                 // the agent is alive. Check once again after a minute.
                 this.blocked = true;
@@ -360,7 +360,7 @@ public class BEventBrokerSubscriber extends Behaviour {
     /**
      * Searches for event source agents and tries to subscribe to one of them.
      */
-    protected void subscribeToEventSource() {
+    protected void sendSubscribeToEventSourceMsg() {
         // do not attempt subscription if we are (entering) in suspended or deleted state
         int state = getAgent().getAgentState().getValue();
         if (state == Agent.AP_SUSPENDED || state == Agent.AP_DELETED) {
@@ -391,7 +391,7 @@ public class BEventBrokerSubscriber extends Behaviour {
 
                 // prefer agent within the same container if possible
                 if (myContainerIdentifier == null || myContainerIdentifier.equals(contIdentifier)) {
-                    if (this.hasSubscribed = subscribeToEventSource(a)) {
+                    if (this.hasSubscribed = sendSubscribeToEventSourceMsg(a)) {
                         setChosenEventSourceAgent(a);
                         this.lastFailedSubscrProviders.clear();
                         break;
@@ -407,7 +407,7 @@ public class BEventBrokerSubscriber extends Behaviour {
             if (!hasSubscribed && !subscriptionAlternatives.isEmpty()) {
                 for (AID sa : subscriptionAlternatives) {
                     if (lastFailedSubscrProviders.contains(sa)) continue; // leave recently failed providers for later
-                    if (this.hasSubscribed = subscribeToEventSource(sa)) {
+                    if (this.hasSubscribed = sendSubscribeToEventSourceMsg(sa)) {
                         setChosenEventSourceAgent(sa);
                         this.lastFailedSubscrProviders.clear();
                         break;
@@ -421,7 +421,7 @@ public class BEventBrokerSubscriber extends Behaviour {
                 if (!this.hasSubscribed && !this.lastFailedSubscrProviders.isEmpty()) {
                     AID[] sp = (AID[]) this.lastFailedSubscrProviders.toArray();
                     for (int i = sp.length - 1; i != -1; i--) {
-                        if (!this.hasSubscribed && (this.hasSubscribed = subscribeToEventSource(sp[i]))) {
+                        if (!this.hasSubscribed && (this.hasSubscribed = sendSubscribeToEventSourceMsg(sp[i]))) {
                             setChosenEventSourceAgent(sp[i]);
                             this.lastFailedSubscrProviders.clear();
                             break;
@@ -544,7 +544,9 @@ public class BEventBrokerSubscriber extends Behaviour {
         if (maxPingAttempts < 1) {
             throw new IllegalArgumentException("Argument maxPingAttempts must be greater than 0");
         }
-        this.maxPingAttempts = maxPingAttempts;
+        synchronized(this) {
+            this.maxPingAttempts = maxPingAttempts;
+        }
     }
 
     /**
@@ -560,7 +562,7 @@ public class BEventBrokerSubscriber extends Behaviour {
      * @param pingTimeoutMs A positive number (greater than 0) describing the time in milliseconds.
      * @throws IllegalArgumentException If pingTimeoutMs is less than 1.
      */
-    public void setPingIntervalMs(long pingTimeoutMs) {
+    public void setPingTimeoutMsMs(long pingTimeoutMs) {
         this.pingTimeoutMs = pingTimeoutMs;
     }
 
@@ -581,7 +583,7 @@ public class BEventBrokerSubscriber extends Behaviour {
      * Changes the "done" state of the behaviour. Once set to done it will be stopped from executing.
      * @param done Set to true to designate done behaviour or false to not done yet.
      */
-    public void setDone(boolean done) {
+    public synchronized void setDone(boolean done) {
         lastFailedSubscrProviders.clear();
         isDone = done;
     }
