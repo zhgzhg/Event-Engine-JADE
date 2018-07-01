@@ -17,6 +17,7 @@ import net.uniplovdiv.fmi.cs.vrs.event.dispatchers.brokers.kafka.EventDispatcher
 import net.uniplovdiv.fmi.cs.vrs.event.dispatchers.encapsulation.DataEncodingMechanism;
 
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.function.Consumer;
 
 /**
@@ -72,6 +73,17 @@ public class BasicConfiguration {
      * then no checks will be executed (not recommended).
      */
     public long subscriberAliveCheckIntervalMillis = 50000;
+
+    public static final long DEFAULT_MAX_TIME_WITHOUT_BROKER_CONNECTION_MILLIS = 35000;
+
+    /**
+     * The maximum amount of time in milliseconds for the dispatcher agent to tolerate lack of connection to the broker.
+     * After elapses any subscribers will be informed and unsubscribed from the broker. If more that one broker system
+     * is used then it is expected for all connections to be present. Failing to accomplish this will trigger the time
+     * countdown and execution of the aforementioned actions. Value of 0 or less will force selecting the default value
+     * of {@link #DEFAULT_MAX_TIME_WITHOUT_BROKER_CONNECTION_MILLIS}.
+     */
+    public long maxTimeWithoutBrokerConnectionMillis = DEFAULT_MAX_TIME_WITHOUT_BROKER_CONNECTION_MILLIS;
 
     /**
      * Settings with the "link" to a particular broker system.
@@ -188,11 +200,12 @@ public class BasicConfiguration {
      * Creates instances of the event dispatchers handling the relaying to the specified broker systems.
      * @param linkModifier Optional temporary modifier of the Link parameters data, used during the instantiation of
      *                     the corresponding dispatchers. Can be null.
-     * @return A list that might contain 0 or more instances.
+     * @param result Instance of the variable holding the results. Cannot be null.
+     * @throws NullPointerException If result is null.
      */
-    public List<IEventDispatcher> makeDispatchers(Consumer<Link> linkModifier) {
-        List<IEventDispatcher> result = Collections.synchronizedList(new ArrayList<>());
-        if (link == null || link.isEmpty()) return result;
+    protected void makeDispatchers(Consumer<Link> linkModifier, List<IEventDispatcher> result) {
+        Objects.requireNonNull(result, "Result holder must not be null");
+        if (link == null || link.isEmpty()) return;
 
         Set<String> topics = new HashSet<>();
         topics.add(topic);
@@ -210,8 +223,8 @@ public class BasicConfiguration {
                     ConfigurationFactoryActiveMQ cfg = new ConfigurationFactoryActiveMQ(link.configurationData,
                             this.dataEncodingMechanism, this.dispatchingType, topics, null);
 
-                        result.add(new EventDispatcherActiveMQ(cfg, link.latestEventsRememberCapacity,
-                                link.doNotReceiveEventsFromSameSource, link.beRetroactive, null));
+                    result.add(new EventDispatcherActiveMQ(cfg, link.latestEventsRememberCapacity,
+                            link.doNotReceiveEventsFromSameSource, link.beRetroactive, null));
 
                 } else if (EventDispatcherKafka.class.isAssignableFrom(link.abstractEventDispatcher)) {
                     if (link.beRetroactive) {
@@ -230,7 +243,40 @@ public class BasicConfiguration {
                 logger.log(Logger.SEVERE, e.getMessage(), e);
             }
         }
+    }
 
+    /**
+     * Synchronously creates instances of the event dispatchers handling the relaying to the specified broker systems.
+     * @param linkModifier Optional temporary modifier of the Link parameters data, used during the instantiation of
+     *                     the corresponding dispatchers. Can be null.
+     * @return A list that might contain 0 or more instances.
+     */
+    public List<IEventDispatcher> makeDispatchers(Consumer<Link> linkModifier) {
+        int sz = 1;
+        if (this.link != null) sz = this.link.size();
+        List<IEventDispatcher> result = Collections.synchronizedList(new ArrayList<>(sz));
+        this.makeDispatchers(linkModifier, result);
         return result;
+    }
+
+    /**
+     * Asynchronously creates instances of the event dispatchers handling the relaying to the specified broker systems.
+     * @param linkModifier Optional temporary modifier of the Link parameters data, used during the instantiation of
+     *                     the corresponding dispatchers. Can be null.
+     * @param result Instance of the variable holding the results. Using {@link Collections#synchronizedList(List)}
+     *               to wrap the actual instance might be a good idea. Cannot be null.
+     * @param executor Instance of {@link ExecutorService} for starting the asynchronous code execution. Cannot be null.
+     * @return Instance of the FutureTask that will eventually do the creation and return when the process is done.
+     * @throws NullPointerException If result or executor is null.
+     */
+    public FutureTask<List<IEventDispatcher>> makeDispatchers(
+            Consumer<Link> linkModifier, List<IEventDispatcher> result, ExecutorService executor) {
+        Objects.requireNonNull("Result holder must not be null");
+        Objects.requireNonNull(executor, "ExecutorService must not be null");
+
+        FutureTask<List<IEventDispatcher>> task = new FutureTask<>(() -> makeDispatchers(linkModifier, result), result);
+        executor.execute(task);
+
+        return task;
     }
 }
