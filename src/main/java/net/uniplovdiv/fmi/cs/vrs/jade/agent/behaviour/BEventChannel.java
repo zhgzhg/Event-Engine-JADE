@@ -19,14 +19,17 @@ import net.uniplovdiv.fmi.cs.vrs.event.serializers.IEventSerializer;
 import net.uniplovdiv.fmi.cs.vrs.event.serializers.JavaEventSerializer;
 import net.uniplovdiv.fmi.cs.vrs.event.serializers.engine.Base32Encoder;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.EventBrokerAgent;
+import net.uniplovdiv.fmi.cs.vrs.jade.agent.configuration.BasicConfiguration;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.AExchangeEvent;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.EventData;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.EventEngineOntology;
+import org.apache.commons.lang3.mutable.MutableBoolean;
 
 import java.lang.reflect.Constructor;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -168,6 +171,10 @@ public class BEventChannel extends TickerBehaviour {
     private IEventSerializer eventSerializerInst = null;
     private Base32Encoder base32EncoderInst = null;
 
+    private long maxTimeWithoutBrokerConnectionMillis =
+            BasicConfiguration.DEFAULT_MAX_TIME_WITHOUT_BROKER_CONNECTION_MILLIS;
+    private ConcurrentMap<AID, Long> lastConnectionlessPeriodsMap = null;
+
     /**
      * Constructor to be used by ordinary agents interested in sending or receiving events.
      * @param agent The agent to associate this behaviour with.
@@ -189,14 +196,25 @@ public class BEventChannel extends TickerBehaviour {
      * Constructor to be used by Event Broker agents interested in distribution, sending and receiving events.
      * @param agent The Event Broker agent the behaviour to be associated with.
      * @param dispatchIntervalMillis The interval on which the actual event dispatching will occur.
+     * @param maxTimeWithoutBrokerConnectionMillis The maximum amount of time for the dispatcher agent to tolerate lack
+     *                                             of connection to the broker. See {@link
+     * net.uniplovdiv.fmi.cs.vrs.jade.agent.configuration.BasicConfiguration#maxTimeWithoutBrokerConnectionMillis}.
      * @param onReceiveEvent  A callback instance executed when new events are received. If null you must manually poll
      *                        for newly received events by using {@link BEventChannel#receive()}.
      */
-    public BEventChannel(EventBrokerAgent agent, long dispatchIntervalMillis, Consumer<IEvent> onReceiveEvent) {
+    public BEventChannel(EventBrokerAgent agent, long dispatchIntervalMillis, long maxTimeWithoutBrokerConnectionMillis,
+                         Consumer<IEvent> onReceiveEvent) {
         super(agent, dispatchIntervalMillis);
+        this.maxTimeWithoutBrokerConnectionMillis = (maxTimeWithoutBrokerConnectionMillis > 0
+                ?
+                maxTimeWithoutBrokerConnectionMillis
+                :
+                BasicConfiguration.DEFAULT_MAX_TIME_WITHOUT_BROKER_CONNECTION_MILLIS
+        );
         this.logger = Logger.getJADELogger(agent.getClass().getName());
         this.myEventBrokerAgent = agent;
         this.onReceiveEvent = onReceiveEvent;
+        this.lastConnectionlessPeriodsMap = new ConcurrentHashMap<>();
     }
 
     /**
@@ -265,6 +283,17 @@ public class BEventChannel extends TickerBehaviour {
     }
 
     /**
+     * Clears the internal event sending queue, returning the events that have been removed from it.
+     * @return A nonempty list of removed events or null.
+     */
+    public List<IEvent> clearSendQueue() {
+        if (this.qSend.isEmpty()) return null;
+        List<IEvent> result = new ArrayList<>(this.qSend.size());
+        for (IEvent element; (element = this.qSend.pop()) != null; result.add(element));
+        return (!result.isEmpty() ? result : null);
+    }
+
+    /**
      * Receives an event. This method will return events only if no callback receiving method has been specified.
      * @return An IEvent instance or null.
      */
@@ -284,6 +313,41 @@ public class BEventChannel extends TickerBehaviour {
     @Override
     public void onTick() {
         if (this.isUsedByEventBroker()) {
+
+            // Check if there are real message broker connections that are down for too long and remotely unsubscribe
+            // the agents associated with them
+
+            this.myEventBrokerAgent.getSubscribedAIDs().forEach(aid -> {
+                EventBrokerAgent.SubscriberData sd = myEventBrokerAgent.getSubscriberDataForAid(aid);
+                if (sd == null) {
+                    this.lastConnectionlessPeriodsMap.remove(aid);
+                    return;
+                }
+
+                MutableBoolean isConnectionProblem = new MutableBoolean(false);
+                sd.iterateOverConnections(iEventDispatcher -> {
+                    if (!isConnectionProblem.booleanValue() && !iEventDispatcher.isConnected()) {
+                        isConnectionProblem.setValue(true);
+                    }
+                });
+
+                if (isConnectionProblem.booleanValue()) {
+                    Long noConnectionTs = this.lastConnectionlessPeriodsMap.get(aid);
+                    if (noConnectionTs == null) {
+                        this.lastConnectionlessPeriodsMap.put(aid, Long.valueOf(System.currentTimeMillis()));
+                    } else {
+                        if (Math.abs(System.currentTimeMillis() - noConnectionTs.longValue()) >
+                                this.maxTimeWithoutBrokerConnectionMillis) {
+                            // mark the agents which will be unsubscribed remotely
+                            this.lastConnectionlessPeriodsMap.remove(aid);
+                            this.myEventBrokerAgent.unsubscribeAIDForEventsAndInform(aid);
+                            logger.warning("Unsubscribing " + aid
+                                    + " due to the lack of full broker connectivity!");
+                        }
+                    }
+                }
+            });
+
             // EventBrokerAgent - send events "to subscribed agents" via Event Engine's EventDispatcher:
             for (IEvent event = this.qSend.poll(); event != null; event = this.qSend.poll()) {
                 for (AID aid : this.myEventBrokerAgent.getSubscribedAIDs()) {
@@ -400,8 +464,12 @@ public class BEventChannel extends TickerBehaviour {
         } else { // is used by ordinary agent to send/receive events
             if (!this.qSend.isEmpty()) {
 
+                // check if there's a broker and if the connection is mature enough to be used
                 AID dest = this.eventSubscrbBehaviour.getChosenEventSourceAgent();
-                if (dest != null) {
+                if (dest != null
+                        && (System.currentTimeMillis() - this.eventSubscrbBehaviour.getLastSubscriptionTimestamp() >
+                            this.eventSubscrbBehaviour.getPingTimeoutMs())) {
+
                     List<byte[]> rawData = new ArrayList<>(this.qSend.size());
                     for (IEvent event = this.qSend.poll(); event != null; event = this.qSend.poll()) {
                         DataPacket dp = this.encodeEventToB32DataPacket(event);
@@ -431,13 +499,24 @@ public class BEventChannel extends TickerBehaviour {
                             if (answer != null && answer.getPerformative() != ACLMessage.CONFIRM) {
                                 // Message not received for some reason. Return the events in queue for later attempt.
 
+                                // on REFUSE the sender might actually be subscribed, but the remote site not to have
+                                // prepared the connection links yet. However refuse is quite improbable with the async
+                                // version of the subscriber creator logic on the agent broker's side.
+                                boolean isRefusal = (answer.getPerformative() == ACLMessage.REFUSE);
+
                                 if (this.failedDistributionAttempts++ == 0) {
                                     this.msgCountToDiscard = rawData.size();
+                                } else if (isRefusal &&
+                                        this.failedDistributionAttempts >= this.maxFailedDistributionAttempts * 2 - 2) {
+                                    // too many refuses, we'd better search another broker to subscribe to
+                                    this.eventSubscrbBehaviour.resubscribe(false);
                                 }
 
                                 // restore the events or discard some if too many attempts happened
+                                // on refusal we're twice more generous for keeping the pending events
                                 for (int i = 0; i < rawData.size(); ++i) {
-                                    if (this.failedDistributionAttempts >= this.maxFailedDistributionAttempts
+                                    if (this.failedDistributionAttempts >=
+                                            (this.maxFailedDistributionAttempts * (isRefusal ? 2 : 1))
                                             && this.msgCountToDiscard > 0) {
                                         logger.log(Logger.SEVERE,
                                                 "Maximum attempts to send event data packet reached. Discarded the"
@@ -612,9 +691,8 @@ public class BEventChannel extends TickerBehaviour {
                     Concept action = ((Result) ce).getAction();
                     Object value = ((Result) ce).getValue();
                     if (action instanceof AExchangeEvent && value instanceof EventData) {
-                        EventData ed = (EventData) value;
-                        AID src = ed.getSource();
-                        if (src != null && myEventBrokerAgent.getSubscriberDataForAid(src) != null) {
+                        AID senderAid = msg.getSender();
+                        if (senderAid != null && myEventBrokerAgent.getSubscriberDataForAid(senderAid) != null) {
                             // confirm the message is received
                             resp.setPerformative(ACLMessage.CONFIRM);
                             resp.setReplyWith(null);
@@ -622,7 +700,7 @@ public class BEventChannel extends TickerBehaviour {
 
                             List<byte[]> data = ((EventData) value).getData();
                             if (data != null && !data.isEmpty()) {
-                                ((EventData) value).setSource(msg.getSender());
+                                ((EventData) value).setSource(senderAid);
                                 return (EventData) value;
                             }
                         } else {
