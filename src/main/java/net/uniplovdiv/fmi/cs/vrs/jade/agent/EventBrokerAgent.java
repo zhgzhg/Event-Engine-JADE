@@ -1040,7 +1040,7 @@ public class EventBrokerAgent extends Agent {
                 return null;
             }, this.taskScheduler);
         }
-        
+
         return true;
     }
 

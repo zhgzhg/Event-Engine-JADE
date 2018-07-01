@@ -13,6 +13,7 @@ module net.uniplovdiv.fmi.cs.vrs.jade {
     requires com.fasterxml.jackson.databind;
     requires com.fasterxml.jackson.annotation;
     requires com.fasterxml.jackson.dataformat.javaprop;
+    requires org.apache.commons.lang3;
 
     requires transitive net.uniplovdiv.fmi.cs.vrs.event;
     requires transitive net.uniplovdiv.fmi.cs.vrs.event.annotations;
