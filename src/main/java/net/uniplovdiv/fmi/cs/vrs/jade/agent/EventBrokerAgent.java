@@ -26,6 +26,7 @@ import net.uniplovdiv.fmi.cs.vrs.event.dispatchers.brokers.AbstractEventDispatch
 import net.uniplovdiv.fmi.cs.vrs.event.dispatchers.brokers.activemq.EventDispatcherActiveMQ;
 import net.uniplovdiv.fmi.cs.vrs.event.dispatchers.brokers.kafka.EventDispatcherKafka;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BEventBrokerAnnouncer;
+import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BEventBrokerSubscriber;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BEventChannel;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BMessageGC;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.configuration.BasicConfiguration;
@@ -33,15 +34,19 @@ import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.EventEngineOntology;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.SubscriptionParameter;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.util.ServiceDescriptionUtils;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.util.YellowPagesUtils;
+import org.apache.commons.lang3.concurrent.BasicThreadFactory;
+import org.apache.commons.lang3.mutable.MutableBoolean;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 
 import java.io.FileInputStream;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 
 /**
@@ -53,16 +58,19 @@ import java.util.logging.Level;
 public class EventBrokerAgent extends Agent {
     private static final long serialVersionUID = -4431769633058927649L;
 
-    private final Logger logger = Logger.getJADELogger(getClass().getName());
+    protected final Logger logger = Logger.getJADELogger(getClass().getName());
 
-    private final ConcurrentMap<AID, SubscriberData> agentToIdForBrokerMap = new ConcurrentHashMap<>();
+    protected final ConcurrentMap<AID, SubscriberData> agentToIdForBrokerMap = new ConcurrentHashMap<>();
 
-    private String eventTopic = new Event().getCategory();
-    private YellowPagesUtils yup = new YellowPagesUtils(this, ServiceDescriptionUtils.createEventSourceSD(eventTopic));
-    private Behaviour bPingResponder = null;
-    private BEventBrokerAnnouncer bEventBrokerAnnouncer = null;
-    private BEventChannel bEventChannel = null;
-    private BasicConfiguration configuration = null;
+    protected String eventTopic = new Event().getCategory();
+    protected YellowPagesUtils yup =
+            new YellowPagesUtils(this, ServiceDescriptionUtils.createEventSourceSD(eventTopic));
+    protected BSubscriptionResponder bSubscriptionResponder = null;
+    protected BPingResponder bPingResponder = null;
+    protected BEventBrokerAnnouncer bEventBrokerAnnouncer = null;
+    protected BEventChannel bEventChannel = null;
+    protected BasicConfiguration configuration = null;
+    protected ScheduledExecutorService taskScheduler = null;
 
     protected Function<SubscriptionParameter, Consumer<BasicConfiguration.Link>> configurationRemapper = (sp) -> {
         return (lnk) -> {
@@ -285,8 +293,7 @@ public class EventBrokerAgent extends Agent {
         }
 
         @Override
-        protected ACLMessage handleSubscription(ACLMessage subscription) throws NotUnderstoodException,
-                RefuseException {
+        protected ACLMessage handleSubscription(ACLMessage subscription) {
             ACLMessage reply = subscription.createReply();
             AID sender = subscription.getSender();
 
@@ -313,20 +320,82 @@ public class EventBrokerAgent extends Agent {
                                 sp.setPersonalId2(UUID.randomUUID().toString());
                         }
 
-                        if (agent.subscribeAIDForEvents(sender, sp)) {
+                        agent.subscribeAIDForEvents(sender, sp,
+                                (agent.configuration.maxTimeWithoutBrokerConnectionMillis > 0
+                                        ?
+                                        agent.configuration.maxTimeWithoutBrokerConnectionMillis
+                                        :
+                                        BasicConfiguration.DEFAULT_MAX_TIME_WITHOUT_BROKER_CONNECTION_MILLIS
+                                ),
+                                () -> {
+                                    try {
+                                        super.handleSubscription(subscription);
+                                        reply.setPerformative(ACLMessage.AGREE);
+                                    } catch (Exception ex) {
+                                        reply.setPerformative(ACLMessage.REFUSE);
+                                    }
+                                    agent.send(reply);
+                                },
+                                () -> {
+                                    reply.setPerformative(ACLMessage.REFUSE);
+                                    agent.send(reply);
+                                }
+                        );
+
+                        /*if (agent.subscribeAIDForEvents(sender, sp)) {
                             super.handleSubscription(subscription);
                             reply.setPerformative(ACLMessage.AGREE);
                         } else {
                             reply.setPerformative(ACLMessage.REFUSE);
-                        }
+                        }*/
                     }
                 } catch (Exception e) {
                     Logger.getJADELogger(this.getClass().getName()).log(Level.SEVERE, e.getMessage(), e);
                     reply.setPerformative(ACLMessage.REFUSE);
+                    return reply;
                 }
             }
 
-            return reply;
+            //return reply;
+            return null;
+        }
+
+        /**
+         * Informs the receiver that has been remotely unsubscribed.
+         * @param receivers The agent id to inform.
+         * @param sender The agent to send the message.
+         */
+        public static void sendUnsubscribedRemotelyMsg(Agent sender, AID... receivers) {
+            if (sender != null && receivers != null && receivers.length > 0) {
+                ACLMessage unsubscrMsg = new ACLMessage(ACLMessage.CANCEL);
+                unsubscrMsg.setOntology(EventEngineOntology.NAME);
+                unsubscrMsg.setLanguage(FIPANames.ContentLanguage.FIPA_SL);
+                unsubscrMsg.setProtocol(FIPANames.InteractionProtocol.FIPA_SUBSCRIBE);
+                unsubscrMsg.setSender(sender.getAID());
+                for (AID r : receivers) {
+                    if (r != null) {
+                        unsubscrMsg.addReceiver(r);
+                    }
+                }
+                sender.send(unsubscrMsg);
+            }
+        }
+
+        /**
+         * Performs local unsubscribe action removing the corresponding AID from the register and informs the remote
+         * side (subscriber for that).
+         * @param subscriberAids The agent identifier of the subscriber to unsubscribe and inform.
+         */
+        public void remoteUnsubscribe(AID... subscriberAids) {
+            if (subscriberAids != null && subscriberAids.length > 0) {
+                EventBrokerAgent agent = (EventBrokerAgent) getAgent();
+                sendUnsubscribedRemotelyMsg(agent, subscriberAids);
+                for (AID s : subscriberAids) {
+                    if (s != null) {
+                        agent.unsubscribeAIDForEvents(s);
+                    }
+                }
+            }
         }
     }
 
@@ -598,6 +667,19 @@ public class EventBrokerAgent extends Agent {
             if (this.configuration.maxSubscribersLimit <= 0) {
                 this.configuration.maxSubscribersLimit = 20;
             }
+            int scheduledPoolSz = (this.configuration.link != null
+                    && this.configuration.link.size() > 6 ? this.configuration.link.size() : 6);
+
+            this.taskScheduler = Executors.newScheduledThreadPool(
+                    Math.max(6, Math.min(scheduledPoolSz, Runtime.getRuntime().availableProcessors())),
+                    new BasicThreadFactory.Builder()
+                            .namingPattern("event-engine-jade-scheduled-tp-%d")
+                            .daemon(true)
+                            .priority(Thread.MAX_PRIORITY)
+                            .build()
+            );
+            ((ScheduledThreadPoolExecutor)this.taskScheduler).setRemoveOnCancelPolicy(true);
+
         } catch (Exception e) {
             logger.log(Logger.SEVERE, e.getMessage(), e);
             logger.info("You can specify the configuration file by passing argument --config=<file_path>");
@@ -612,9 +694,11 @@ public class EventBrokerAgent extends Agent {
         this.getContentManager().registerOntology(FIPAManagementOntology.getInstance());
         this.getContentManager().registerOntology(JADEManagementOntology.getInstance());
 
-        addBehaviour(new BSubscriptionResponder(this));
+        this.bSubscriptionResponder = new BSubscriptionResponder(this);
+        addBehaviour(this.bSubscriptionResponder);
         addBehaviour(new BMessageGC(this, 300000));
-        this.bEventChannel = new BEventChannel(this, this.configuration.getDispatchIntervalMillis(), null);
+        this.bEventChannel = new BEventChannel(this, this.configuration.getDispatchIntervalMillis(),
+                this.configuration.maxTimeWithoutBrokerConnectionMillis, null);
         this.bEventChannel.setMaxFailedDistributionAttempts(this.configuration.maxFailedDistributionAttempts);
         addBehaviour(this.bEventChannel);
 
@@ -662,28 +746,31 @@ public class EventBrokerAgent extends Agent {
         this.bEventChannel.onTick();
         removeBehaviour(this.bEventChannel);
 
-        ACLMessage byeMsg = new ACLMessage(ACLMessage.CANCEL);
-        byeMsg.setOntology(EventEngineOntology.NAME);
-        byeMsg.setLanguage(FIPANames.ContentLanguage.FIPA_SL);
-        byeMsg.setProtocol(FIPANames.InteractionProtocol.FIPA_SUBSCRIBE);
-        byeMsg.setSender(getAID());
+        try {
+            this.taskScheduler.awaitTermination(120, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
         this.agentToIdForBrokerMap.forEach((aid, sd) -> {
             if (sd != null) {
                 sd.setAllowConnections(false);
                 sd.iterateOverConnections(c -> { if (c != null) c.close(); });
             }
-            byeMsg.addReceiver(aid);
         });
 
         // Inform registered agents that their events subscription is cancelled
-        this.send(byeMsg);
+        BSubscriptionResponder.sendUnsubscribedRemotelyMsg(this,
+                this.agentToIdForBrokerMap.keySet().toArray(new AID[this.agentToIdForBrokerMap.keySet().size()]));
         this.agentToIdForBrokerMap.clear();
     }
 
     @Override
     protected void takeDown() {
         this.preparePause();
+        if (this.taskScheduler != null) {
+            this.taskScheduler.shutdownNow();
+        }
     }
 
     @Override
@@ -746,26 +833,325 @@ public class EventBrokerAgent extends Agent {
     }
 
     /**
-     * Adds Agent ID to internal "list" of agents that are going to be informed for events.
-     * @param aid The agent id. Cannot be null.
+     * Checks if the subscription capacity has actually been surpassed.
+     * @return True if it has been surpassed otherwise false.
+     */
+    protected synchronized boolean isPastSubscriptionCapacity() {
+        return (this.configuration.maxSubscribersLimit > 0
+                && this.agentToIdForBrokerMap.size() > this.configuration.maxSubscribersLimit);
+    }
+
+    /**
+     * Asynchronously adds agent's ID to internal "list" of agents that are going to be informed for events.
+     * @param aid The agent id to subscribe. Cannot be null.
+     * @param sp Additional subscription parameters used to uniquely and privately identify the agent.
+     * @param timeoutMs The maximum time within the addition to happen. After elapses and the addition is still pending
+     *                  the task will be cancelled, terminated and onFailure argument will be executed.
+     * @param onSuccess The Runnable to be executed after succeeding. The execution context might be in the current or
+     *                  another thread.
+     * @param onFailure The Runnable to be executed after failing/timing out. The execution context might be in the
+     *                  current or another thread.
+     */
+    public void subscribeAIDForEvents(AID aid, SubscriptionParameter sp, long timeoutMs, Runnable onSuccess,
+                                      Runnable onFailure) {
+        // early checks and execution speed optimization
+        if (isSubscriptionCapacityReached() || aid == null) { onFailure.run(); return; }
+
+        SubscriberData subscriberData;
+        {
+            final MutableBoolean isAbsent = new MutableBoolean(false);
+            subscriberData = this.agentToIdForBrokerMap.computeIfAbsent(aid, _aid -> {
+                isAbsent.setValue(true);
+                return new SubscriberData(sp, configuration.eventDeduplicationCapacity);
+            });
+            if (!isAbsent.booleanValue() && subscriberData != null) {
+                onSuccess.run();
+                return;
+            } else if (subscriberData == null) {
+                subscriberData = this.agentToIdForBrokerMap.put(aid,
+                        new SubscriberData(sp, configuration.eventDeduplicationCapacity));
+            }
+        }
+
+        if (this.taskScheduler == null) { // unlikely
+            this.taskScheduler = Executors.newScheduledThreadPool(
+                    Math.max(6, Math.min(6, Runtime.getRuntime().availableProcessors()))
+            );
+            ((ScheduledThreadPoolExecutor)this.taskScheduler).setRemoveOnCancelPolicy(true);
+        }
+
+        Consumer<BasicConfiguration.Link> linkModifiers =
+                (this.configurationRemapper != null ? configurationRemapper.apply(sp) : null);
+
+        List<IEventDispatcher> result = Collections.synchronizedList(new ArrayList<>(configuration.link.size()));
+        FutureTask<List<IEventDispatcher>> dispatchersCreatorTask =
+                configuration.makeDispatchers(linkModifiers, result, this.taskScheduler);
+
+        final SubscriberData _subscriberData = subscriberData;
+        AbstractEventDispatcher.scheduleNow(() -> {
+                List<IEventDispatcher> dispatchers = null;
+                try {
+                    long ts = System.currentTimeMillis();
+                    dispatchers = dispatchersCreatorTask.get(timeoutMs, TimeUnit.MILLISECONDS);
+                    if (dispatchers != null) {
+                        if (dispatchers.isEmpty()) {
+                            dispatchers = null;
+                        } else {
+                            // some message broker systems like Kafka don't block upon instantiation if there's no
+                            // connection established. We try to unify such behaviours here.
+                            for (Iterator<IEventDispatcher> it = dispatchers.iterator(); it.hasNext(); ) {
+                                IEventDispatcher d = it.next();
+                                if (!d.isConnected()) {
+                                    long slpDiff = System.currentTimeMillis() - ts;
+                                    if (slpDiff < timeoutMs) {
+                                        Thread.sleep(timeoutMs - slpDiff);
+                                    }
+                                }
+                                if (!d.isConnected())
+                                    throw new IllegalStateException("Some dispatchers not created!");
+                            }
+
+                            if (isPastSubscriptionCapacity())
+                                throw new IllegalStateException("Subscription capacity surpassed");
+                        }
+                    }
+                    if (dispatchers == null) throw new NullPointerException("No dispatchers created");
+                    if (!_subscriberData.setConnections(dispatchers)) {
+                        throw new UnsupportedOperationException(
+                                "Denied setting dispatcher instances for a subscriber AID!" + aid.toString());
+                    }
+                } catch (Exception e) {
+                    dispatchersCreatorTask.cancel(true);
+                    if (dispatchers != null) {
+                        dispatchers.forEach(c -> { if (c != null) c.close(); });
+                        dispatchers.clear();
+                    }
+                    this.agentToIdForBrokerMap.remove(aid);
+                    onFailure.run();
+                    return null;
+                }
+
+                if (isSubscriptionCapacityReached()) {
+                    logger.log(Level.WARNING, "Event broker agent " + getAID() + " reached its subscribers limit -"
+                            + " subscribers count " + this.agentToIdForBrokerMap.size());
+
+                    ServiceDescription sd = this.yup.getServiceDescription();
+
+                    ServiceDescriptionUtils.setFirstPropertyNamed(ServiceDescriptionUtils.ACCEPT_NEW_SUBSCRIBERS,
+                            ServiceDescriptionUtils.ACCEPT_NEW_SUBSCRIBERS_NEGATIVE_ANS, sd);
+
+                    CompletableFuture.supplyAsync(() -> {
+                        this.yup.deregister(); // might block for too long. that's why we execute it here
+                        this.yup.register();
+                        return null;
+                    }, this.taskScheduler);
+                }
+
+                onSuccess.run();
+                return null;
+            },
+                this.taskScheduler
+        );
+    }
+
+    /**
+     * Semi-synchronously adds Agent ID to internal "list" of agents that are going to be informed for events.
+     * @param aid The agent id to subscribe. Cannot be null.
      * @param sp Additional subscription parameters used to uniquely and privately identify the agent.
      * @return True if the agent is subscribed, otherwise false.
+     * @deprecated Use the asynchronous version of the method instead!
      */
+    @Deprecated
     public boolean subscribeAIDForEvents(AID aid, SubscriptionParameter sp) {
         if (isSubscriptionCapacityReached() || aid == null) return false;
+        if (isAIDSubscribed(aid)) return true; // execution speed optimization
+
+        final MutableBoolean isAbsent = new MutableBoolean(false);
+        final SubscriberData subscriberData = this.agentToIdForBrokerMap.computeIfAbsent(aid, _aid -> {
+            isAbsent.setValue(true);
+            return new SubscriberData(sp, configuration.eventDeduplicationCapacity);
+        });
+
+        if (isAbsent.booleanValue() && subscriberData != null) {
+            if (this.taskScheduler == null) { // unlikely
+                this.taskScheduler = Executors.newScheduledThreadPool(
+                        Math.max(6, Math.min(6, Runtime.getRuntime().availableProcessors()))
+                );
+                ((ScheduledThreadPoolExecutor)this.taskScheduler).setRemoveOnCancelPolicy(true);
+            }
+
+            Consumer<BasicConfiguration.Link> linkModifiers =
+                    (this.configurationRemapper != null ? configurationRemapper.apply(sp) : null);
+
+            Supplier<List<IEventDispatcher>> eventDispatchersSupplier =
+                    () -> configuration.makeDispatchers(linkModifiers);
+
+            Consumer<ImmutablePair<List<IEventDispatcher>, Boolean>> connectionChecker = (dispatchSupplUndoPair) -> {
+                // on failure send to the remote agent "remote unsubscribe" message due to the lack of broker
+                // connections
+                List<IEventDispatcher> eventDispatchers = dispatchSupplUndoPair.getLeft();
+                if (eventDispatchers == null || eventDispatchers.isEmpty()) {
+                    BSubscriptionResponder.sendUnsubscribedRemotelyMsg(EventBrokerAgent.this, aid);
+                    this.agentToIdForBrokerMap.remove(aid);
+                } else if (dispatchSupplUndoPair.getRight().booleanValue()
+                        || !subscriberData.setConnections(eventDispatchers)) { // the second arg is unlikely to happen
+                    BSubscriptionResponder.sendUnsubscribedRemotelyMsg(EventBrokerAgent.this, aid);
+                    this.bSubscriptionResponder.remoteUnsubscribe(aid);
+                    eventDispatchers.forEach(c -> { if (c != null) c.close(); });
+                    eventDispatchers.clear();
+                    this.agentToIdForBrokerMap.remove(aid);
+                }
+            };
+
+            CompletableFuture<List<IEventDispatcher>> createConnections = AbstractEventDispatcher.scheduleNow(
+                    eventDispatchersSupplier::get, this.taskScheduler);
+            AbstractEventDispatcher
+                    .executeWithin(
+                            createConnections,
+                            Duration.ofMillis(
+                                    configuration.maxTimeWithoutBrokerConnectionMillis > 0
+                                            ?
+                                            configuration.maxTimeWithoutBrokerConnectionMillis
+                                            :
+                                            BasicConfiguration.DEFAULT_MAX_TIME_WITHOUT_BROKER_CONNECTION_MILLIS
+                            ),
+                            this.taskScheduler
+                    )
+                    .whenComplete((data, exception) -> {
+                            if (exception != null) {
+                                createConnections.cancel(true);
+                            }
+                            connectionChecker.accept(ImmutablePair.of(data, Boolean.valueOf(exception != null)));
+                    });
+        }
+
+        /* =======================================================================
+        final MutableBoolean undoSubscription = new MutableBoolean(false);
+        this.agentToIdForBrokerMap.computeIfAbsent(aid, _aid -> {
+            SubscriberData subscriberData = new SubscriberData(sp, configuration.eventDeduplicationCapacity);
+            Consumer<BasicConfiguration.Link> linkModifiers =
+                    (this.configurationRemapper != null ? configurationRemapper.apply(sp) : null);
+
+            undoSubscription.setValue(false);
+            Supplier<List<IEventDispatcher>> eventDispatchersSupplier =
+                    () -> configuration.makeDispatchers(linkModifiers);
+
+            Consumer<List<IEventDispatcher>> connectionChecker = (eventDispatchers) -> {
+                // on failure send to the remote agent "remote unsubscribe" message due to the lack of broker
+                // connections
+                if (eventDispatchers == null || eventDispatchers.isEmpty()) {
+                    BSubscriptionResponder.sendUnsubscribedRemotelyMsg(EventBrokerAgent.this, _aid);
+                } else if (undoSubscription.booleanValue()
+                        || !subscriberData.setConnections(eventDispatchers)) { // the second arg is unlikely to happen
+                    BSubscriptionResponder.sendUnsubscribedRemotelyMsg(EventBrokerAgent.this, _aid);
+                    eventDispatchers.forEach(c -> { if (c != null) c.close(); });
+                    eventDispatchers.clear();
+                }
+            };
+
+            if (configuration.maxTimeWithoutBrokerConnectionMillis > 0) {
+                if (this.taskScheduler == null) { // unlikely
+                    this.taskScheduler = Executors.newScheduledThreadPool(
+                            Math.min(2, Runtime.getRuntime().availableProcessors())
+                    );
+                }
+                try {
+                    AbstractEventDispatcher
+                            .executeWithin(
+                                    AbstractEventDispatcher.scheduleNow(
+                                            () -> eventDispatchersSupplier.get(),
+                                            this.taskScheduler
+                                    ),
+                                    Duration.ofMillis(configuration.maxTimeWithoutBrokerConnectionMillis),
+                                    this.taskScheduler
+                            )
+                            .whenComplete((data, exception) -> {
+                                undoSubscription.setValue(exception == null);
+                                connectionChecker.accept(data);
+                            });
+                }catch (Exception e) {}
+            } else {
+                CompletableFuture
+                        .supplyAsync(eventDispatchersSupplier)
+                        .thenAccept(connectionChecker);
+            }
+
+            return (subscriberData != null && subscriberData.connections != null
+                    && !subscriberData.connections.isEmpty() ? subscriberData : null);
+        }); ===================================== */
+
+        if (isSubscriptionCapacityReached()) {
+            logger.log(Level.WARNING, "Event broker agent " + getAID()
+                    + " reached its subscribers limit - subscribers count " + this.agentToIdForBrokerMap.size());
+
+            ServiceDescription sd = yup.getServiceDescription();
+
+            ServiceDescriptionUtils.setFirstPropertyNamed(ServiceDescriptionUtils.ACCEPT_NEW_SUBSCRIBERS,
+                    ServiceDescriptionUtils.ACCEPT_NEW_SUBSCRIBERS_NEGATIVE_ANS, sd);
+
+            CompletableFuture.supplyAsync(() -> {
+                yup.deregister(); // might block for too long. that's why we execute it here
+                yup.register();
+                return null;
+            }, this.taskScheduler);
+        }
+
+        /*
+        // old==================================================================================
         if (!isAIDSubscribed(aid)) {
             this.agentToIdForBrokerMap.computeIfAbsent(aid, _aid -> {
                 SubscriberData subscriberData = new SubscriberData(sp, configuration.eventDeduplicationCapacity);
                 Consumer<BasicConfiguration.Link> linkModifiers =
                         (this.configurationRemapper != null ? configurationRemapper.apply(sp) : null);
 
-                CompletableFuture
-                        .supplyAsync(() -> configuration.makeDispatchers(linkModifiers))
-                        .thenAccept(result -> {
-                            if (!subscriberData.setConnections(result)) {
-                                subscriberData.connections.forEach(c -> { if (c != null) c.close(); });
-                            }
-                        });
+                Supplier<List<IEventDispatcher>> eventDispatchersSupplier =
+                        () -> configuration.makeDispatchers(linkModifiers);
+
+                Consumer<List<IEventDispatcher>> connectionChecker = (eventDispatchers) -> {
+                    // on failure send to the remote agent "remote unsubscribe" message due to the lack of broker
+                    // connections
+                    if (!subscriberData.setConnections(eventDispatchers)) {
+                        BSubscriptionResponder.sendUnsubscribedRemotelyMsg(EventBrokerAgent.this, _aid);
+                        subscriberData.connections.forEach(c -> { if (c != null) c.close(); });
+                        this.agentToIdForBrokerMap.remove(_aid);
+                    } else {
+                        if (eventDispatchers == null || eventDispatchers.isEmpty()) {
+                            BSubscriptionResponder.sendUnsubscribedRemotelyMsg(EventBrokerAgent.this, _aid);
+                            this.agentToIdForBrokerMap.remove(_aid);
+                        }
+                    }
+                };
+
+                // TODO FIXME
+                subscriberData.markConnectionInitStartTime();
+
+                if (configuration.maxTimeWithoutBrokerConnectionMillis > 0) {
+                    if (this.taskScheduler == null) { // unlikely
+                        this.taskScheduler = Executors.newScheduledThreadPool(
+                                Math.min(2, Runtime.getRuntime().availableProcessors())
+                        );
+                    }
+                    AbstractEventDispatcher
+                            .executeWithin(
+                                    AbstractEventDispatcher.scheduleNow(
+                                            () -> eventDispatchersSupplier.get(),
+                                            this.taskScheduler
+                                    ),
+                                    Duration.ofMillis(configuration.maxTimeWithoutBrokerConnectionMillis),
+                                    this.taskScheduler
+                            )
+                            .whenComplete((data, exception) -> {
+                                if (exception == null) {
+                                    connectionChecker.accept(data);
+                                } else {
+
+                                }
+                            });
+                } else {
+                    CompletableFuture
+                            .supplyAsync(eventDispatchersSupplier)
+                            .thenAccept(connectionChecker);
+                }
 
                 return subscriberData;
             });
@@ -785,6 +1171,7 @@ public class EventBrokerAgent extends Agent {
                     return null;
                 });
             }
+            */
 
             /*this.agentToIdForBrokerMap.computeIfAbsent(aid, _aid -> { // a synchronous version of the above
                 SubscriberData subscriberData = new SubscriberData(sp, configuration.eventDeduplicationCapacity);
@@ -795,7 +1182,7 @@ public class EventBrokerAgent extends Agent {
                 }
                 return subscriberData;
             });*/
-        }
+        /*}*/
         return true;
     }
 
@@ -810,6 +1197,7 @@ public class EventBrokerAgent extends Agent {
             if (sd.connections != null) {
                 sd.setAllowConnections(false);
                 sd.iterateOverConnections(c -> { if (c != null) c.close(); });
+                sd.connections.clear();
                 sd.getLatestDeduplicationKeys().clear();
             }
             return null;
@@ -824,12 +1212,21 @@ public class EventBrokerAgent extends Agent {
                 yup.deregister(); // might block for too long. that's why we execute it here
                 yup.register();
                 return null;
-            });
+            }, this.taskScheduler);
         }
     }
 
     /**
-     * Returns set of Agent IDs subscribed for events.
+     * Removes Agent ID from the internal "list" of agents that are going to be informed for events and also informs
+     * the Agent ID that has been unsubcribed "remotely".
+     * @param aid The agent id to be removed.
+     */
+    public void unsubscribeAIDForEventsAndInform(AID aid) {
+        this.bSubscriptionResponder.remoteUnsubscribe(aid);
+    }
+
+    /**
+     * Returns copy set of Agent IDs subscribed for events.
      * @return Immutable collection of AIDs.
      */
     public Collection<AID> getSubscribedAIDs() {
