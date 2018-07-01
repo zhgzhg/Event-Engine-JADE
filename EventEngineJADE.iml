@@ -11,29 +11,6 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" name="Maven: com.github.zhgzhg:ee-annotations:0.1" level="project" />
-    <orderEntry type="library" name="Maven: org.apache.commons:commons-lang3:3.7" level="project" />
-    <orderEntry type="library" name="Maven: com.github.zhgzhg:ee-events:0.1" level="project" />
-    <orderEntry type="library" name="Maven: com.fasterxml:classmate:1.4.0" level="project" />
-    <orderEntry type="library" name="Maven: com.github.zhgzhg:ee-serializers:0.1" level="project" />
-    <orderEntry type="library" name="Maven: com.google.code.gson:gson:2.8.4" level="project" />
-    <orderEntry type="library" name="Maven: commons-codec:commons-codec:1.11" level="project" />
-    <orderEntry type="library" name="Maven: io.github.lukehutch:fast-classpath-scanner:2.21" level="project" />
-    <orderEntry type="library" name="Maven: com.github.zhgzhg:ee-dispatchers:0.1" level="project" />
-    <orderEntry type="library" name="Maven: org.apache.kafka:kafka-clients:1.1.0" level="project" />
-    <orderEntry type="library" name="Maven: org.lz4:lz4-java:1.4" level="project" />
-    <orderEntry type="library" name="Maven: org.xerial.snappy:snappy-java:1.1.7.1" level="project" />
-    <orderEntry type="library" name="Maven: org.apache.activemq:activemq-client:5.15.3" level="project" />
-    <orderEntry type="library" name="Maven: org.fusesource.hawtbuf:hawtbuf:1.11" level="project" />
-    <orderEntry type="library" name="Maven: org.apache.geronimo.specs:geronimo-j2ee-management_1.1_spec:1.0.1" level="project" />
-    <orderEntry type="library" name="Maven: com.github.zhgzhg:event-engine-j9p-workarounds:0.1" level="project" />
-    <orderEntry type="library" name="Maven: com.github.zhgzhg.mirror.tilab.jade:jade:4.5.0" level="project" />
-    <orderEntry type="library" name="Maven: org.slf4j:slf4j-api:1.8.0-beta2" level="project" />
-    <orderEntry type="library" name="Maven: org.slf4j:slf4j-simple:1.8.0-beta2" level="project" />
-    <orderEntry type="library" name="Maven: com.fasterxml.jackson.core:jackson-core:2.9.5" level="project" />
-    <orderEntry type="library" name="Maven: com.fasterxml.jackson.core:jackson-annotations:2.9.5" level="project" />
-    <orderEntry type="library" name="Maven: com.fasterxml.jackson.core:jackson-databind:2.9.5" level="project" />
-    <orderEntry type="library" name="Maven: com.fasterxml.jackson.dataformat:jackson-dataformat-properties:2.9.5" level="project" />
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
@@ -43,5 +20,28 @@
         <SOURCES />
       </library>
     </orderEntry>
+    <orderEntry type="library" name="Maven: com.github.zhgzhg:ee-annotations:0.1" level="project" />
+    <orderEntry type="library" name="Maven: com.github.zhgzhg:ee-events:0.1" level="project" />
+    <orderEntry type="library" name="Maven: com.fasterxml:classmate:1.4.0" level="project" />
+    <orderEntry type="library" name="Maven: com.github.zhgzhg:ee-serializers:0.1" level="project" />
+    <orderEntry type="library" name="Maven: com.google.code.gson:gson:2.8.5" level="project" />
+    <orderEntry type="library" name="Maven: commons-codec:commons-codec:1.11" level="project" />
+    <orderEntry type="library" name="Maven: io.github.lukehutch:fast-classpath-scanner:3.1.0" level="project" />
+    <orderEntry type="library" name="Maven: com.github.zhgzhg:ee-dispatchers:0.1" level="project" />
+    <orderEntry type="library" name="Maven: org.apache.kafka:kafka-clients:1.1.0" level="project" />
+    <orderEntry type="library" name="Maven: org.lz4:lz4-java:1.4" level="project" />
+    <orderEntry type="library" name="Maven: org.xerial.snappy:snappy-java:1.1.7.1" level="project" />
+    <orderEntry type="library" name="Maven: org.apache.activemq:activemq-client:5.15.4" level="project" />
+    <orderEntry type="library" name="Maven: org.fusesource.hawtbuf:hawtbuf:1.11" level="project" />
+    <orderEntry type="library" name="Maven: org.apache.geronimo.specs:geronimo-j2ee-management_1.1_spec:1.0.1" level="project" />
+    <orderEntry type="library" name="Maven: com.github.zhgzhg:event-engine-j9p-workarounds:0.1" level="project" />
+    <orderEntry type="library" name="Maven: com.github.zhgzhg.mirror.tilab.jade:jade:4.5.0" level="project" />
+    <orderEntry type="library" name="Maven: org.apache.commons:commons-lang3:3.7" level="project" />
+    <orderEntry type="library" name="Maven: org.slf4j:slf4j-api:1.8.0-beta2" level="project" />
+    <orderEntry type="library" name="Maven: org.slf4j:slf4j-simple:1.8.0-beta2" level="project" />
+    <orderEntry type="library" name="Maven: com.fasterxml.jackson.core:jackson-core:2.9.6" level="project" />
+    <orderEntry type="library" name="Maven: com.fasterxml.jackson.core:jackson-annotations:2.9.6" level="project" />
+    <orderEntry type="library" name="Maven: com.fasterxml.jackson.core:jackson-databind:2.9.6" level="project" />
+    <orderEntry type="library" name="Maven: com.fasterxml.jackson.dataformat:jackson-dataformat-properties:2.9.6" level="project" />
   </component>
 </module>
