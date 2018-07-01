@@ -23,9 +23,9 @@ import java.util.logging.Level;
 
 /**
  * Implementation of behaviour subscribing a particular agent for events. Once started it will persists and continuously
- * monitor the availability of the subscription provider and will automatically switch to another one in case of issues.
- * This behaviour contains blocking logic, so it should be wrapped using {@link ThreadedBehaviourFactory}.
- * For e.g. you'll need to have a field with the thread wrapper and should also call interrupt when your agent dies:
+ * monitors the availability of the subscription provider and will automatically switch to another one in case of
+ * issues. This behaviour contains blocking logic, so it should be wrapped using {@link ThreadedBehaviourFactory}. For
+ * e.g. you'll need to have a field with the thread wrapper and should also call interrupt when your agent dies:
  * <pre>
  * <code>
  * public class MyAgent extends Agent {
@@ -68,8 +68,10 @@ public class BEventBrokerSubscriber extends Behaviour {
 
     private volatile short maxPingAttempts = 5;
     private short currentPingAttempt = 0;
-    private volatile long pingTimeoutMs = 200;
+    private volatile long pingTimeoutMs = 200L;
     private AID aidToPing = null;
+
+    private volatile long maxResponseWaitTimeMillis = 60000L;
 
     private boolean blocked = false;
     private long wakeupTime = 0;
@@ -151,11 +153,12 @@ public class BEventBrokerSubscriber extends Behaviour {
 
     /**
      * Retrieves a pseudo-unique container identifier consisting of ContainerID name and port for a particular agent.
-     * @param searchAgent The target agent ID to be searched for. Cannot be null
+     * @param searchAgent The target agent ID to be searched for. Cannot be null.
+     * @param waitForResponseMillis TODO
      * @return A nonempty string on success otherwise null.
      * @throws NullPointerException If searchAgent is null or if the failed to retrieve ContainerID parts.
      */
-    private String retrieveContainerIdentifierOfAgent(AID searchAgent) {
+    private String retrieveContainerIdentifierOfAgent(AID searchAgent, long waitForResponseMillis) {
         Objects.requireNonNull(searchAgent, "Null AID for searchAgent");
 
         try {
@@ -192,7 +195,7 @@ public class BEventBrokerSubscriber extends Behaviour {
             agent.getContentManager().fillContent(msg, act);
             agent.send(msg);
 
-            ACLMessage resp = agent.blockingReceive(rt, 60000);
+            ACLMessage resp = agent.blockingReceive(rt, waitForResponseMillis);
             if (resp != null) {
                 Result r = (Result) agent.getContentManager().extractContent(resp);
                 ContainerID cid = (ContainerID) r.getValue();
@@ -209,8 +212,12 @@ public class BEventBrokerSubscriber extends Behaviour {
      * Send subscription request message to Event Source agent - desire to receive events powered by Event Engine.
      * @param agentId The identifier of the agent.
      * @return True if the subscription was successful, otherwise false.
+     * @throws IllegalArgumentException If waitForResponseMillis is negative.
      */
-    private boolean sendSubscribeToEventSourceMsg(AID agentId) {
+    private boolean sendSubscribeToEventSourceMsg(AID agentId, long waitForResponseMillis) {
+        if (waitForResponseMillis < 0)
+            throw new IllegalArgumentException("waitForResponseMillis cannot be negative: " + waitForResponseMillis);
+
         ACLMessage msg = new ACLMessage(ACLMessage.SUBSCRIBE);
         Agent agent = getAgent();
         msg.setSender(agent.getAID());
@@ -224,7 +231,7 @@ public class BEventBrokerSubscriber extends Behaviour {
             agent.getContentManager().fillContent(msg, act);
             agent.send(msg);
 
-            ACLMessage recvMsg = agent.blockingReceive(acceptedMessages, 60000L);
+            ACLMessage recvMsg = agent.blockingReceive(acceptedMessages, waitForResponseMillis);
             if (recvMsg != null) {
                 MessageTemplate ok = MessageTemplate.and(
                         MessageTemplate.MatchSender(agentId),
@@ -344,7 +351,7 @@ public class BEventBrokerSubscriber extends Behaviour {
             }
 
             AID eSrc = getChosenEventSourceAgent();
-            if (retrieveContainerIdentifierOfAgent(eSrc) == null || !pingAgent(eSrc)) {
+            if (retrieveContainerIdentifierOfAgent(eSrc, this.maxResponseWaitTimeMillis) == null || !pingAgent(eSrc)) {
                 // the agent is probably dead. Just in case try sending to it an unsubscribe message.
                 this.hasSubscribed = false;
                 sendUnsubscribeFromEventSourceMsg(eSrc);
@@ -380,18 +387,19 @@ public class BEventBrokerSubscriber extends Behaviour {
                 return;
             }
 
-            String myContainerIdentifier = this.retrieveContainerIdentifierOfAgent(myAID);
+            String myContainerIdentifier =
+                    this.retrieveContainerIdentifierOfAgent(myAID, this.maxResponseWaitTimeMillis);
 
             final List<AID> subscriptionAlternatives = new ArrayList<>();
 
             for (AID a : agents) {
                 if (a.equals(myAID)) continue;
 
-                String contIdentifier = this.retrieveContainerIdentifierOfAgent(a);
+                String contIdentifier = this.retrieveContainerIdentifierOfAgent(a, this.maxResponseWaitTimeMillis);
 
                 // prefer agent within the same container if possible
                 if (myContainerIdentifier == null || myContainerIdentifier.equals(contIdentifier)) {
-                    if (this.hasSubscribed = sendSubscribeToEventSourceMsg(a)) {
+                    if (this.hasSubscribed = sendSubscribeToEventSourceMsg(a, this.maxResponseWaitTimeMillis)) {
                         setChosenEventSourceAgent(a);
                         this.lastFailedSubscrProviders.clear();
                         break;
@@ -407,7 +415,7 @@ public class BEventBrokerSubscriber extends Behaviour {
             if (!hasSubscribed && !subscriptionAlternatives.isEmpty()) {
                 for (AID sa : subscriptionAlternatives) {
                     if (lastFailedSubscrProviders.contains(sa)) continue; // leave recently failed providers for later
-                    if (this.hasSubscribed = sendSubscribeToEventSourceMsg(sa)) {
+                    if (this.hasSubscribed = sendSubscribeToEventSourceMsg(sa, this.maxResponseWaitTimeMillis)) {
                         setChosenEventSourceAgent(sa);
                         this.lastFailedSubscrProviders.clear();
                         break;
@@ -421,7 +429,8 @@ public class BEventBrokerSubscriber extends Behaviour {
                 if (!this.hasSubscribed && !this.lastFailedSubscrProviders.isEmpty()) {
                     AID[] sp = (AID[]) this.lastFailedSubscrProviders.toArray();
                     for (int i = sp.length - 1; i != -1; i--) {
-                        if (!this.hasSubscribed && (this.hasSubscribed = sendSubscribeToEventSourceMsg(sp[i]))) {
+                        if (!this.hasSubscribed && (this.hasSubscribed = sendSubscribeToEventSourceMsg(sp[i],
+                                this.maxResponseWaitTimeMillis))) {
                             setChosenEventSourceAgent(sp[i]);
                             this.lastFailedSubscrProviders.clear();
                             break;
@@ -564,6 +573,28 @@ public class BEventBrokerSubscriber extends Behaviour {
      */
     public void setPingTimeoutMsMs(long pingTimeoutMs) {
         this.pingTimeoutMs = pingTimeoutMs;
+    }
+
+    /**
+     * Returns the currently set maximum tolerated wait response time from the opposite agent.
+     * @return A number greater than -1 representing time interval in milliseconds.
+     */
+    public long getMaxResponseWaitTimeMillis() {
+        return maxResponseWaitTimeMillis;
+    }
+
+    /**
+     * Sets the maximum tolerated wait response time from the opposite agent.
+     * @param maxResponseWaitTimeMillis A nonnegative number representing time interval in milliseconds.
+     * @throws IllegalArgumentException If maxResponseWaitTimeMillis is negative number.
+     */
+    public void setMaxResponseWaitTimeMillis(long maxResponseWaitTimeMillis) {
+        if (maxResponseWaitTimeMillis < 0)
+            throw new IllegalArgumentException("waitForResponseMillis cannot be negative: "
+                    + maxResponseWaitTimeMillis);
+        synchronized (this) {
+            this.maxResponseWaitTimeMillis = maxResponseWaitTimeMillis;
+        }
     }
 
     @Override
