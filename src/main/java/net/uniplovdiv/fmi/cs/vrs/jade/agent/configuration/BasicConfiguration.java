@@ -176,6 +176,33 @@ public class BasicConfiguration {
     public List<Link> link;
 
     /**
+     *  Constructor.
+     */
+    public BasicConfiguration() { }
+
+    /**
+     * Copy constructor.
+     * @param cfg Another {@link BasicConfiguration} instance from which to copy the data. Providing null value instead
+     *            is equivalent to calling the default constructor of the class.
+     */
+    public BasicConfiguration(BasicConfiguration cfg) {
+        if (cfg == null) return;
+        this.dataEncodingMechanism = cfg.dataEncodingMechanism;
+        this.dispatchingType = cfg.dispatchingType;
+        this.topic = cfg.topic;
+        this.maxFailedDistributionAttempts = cfg.maxFailedDistributionAttempts;
+        this.eventDeduplicationCapacity = cfg.eventDeduplicationCapacity;
+        this.dispatchIntervalMillis = cfg.dispatchIntervalMillis;
+        this.maxSubscribersLimit = cfg.maxSubscribersLimit;
+        this.subscriberAliveCheckIntervalMillis = cfg.subscriberAliveCheckIntervalMillis;
+        this.maxTimeWithoutBrokerConnectionMillis = cfg.maxTimeWithoutBrokerConnectionMillis;
+        if (cfg.link != null) {
+            this.link = new ArrayList<>(cfg.link.size());
+            cfg.link.forEach(l -> link.add(new Link(l)));
+        }
+    }
+
+    /**
      * Returns how often the agent will check for events pending for dispatching.
      * @return The amount of time in milliseconds on which the checking will be done.
      */
