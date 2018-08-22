@@ -50,7 +50,7 @@
 
         <event-engine-version>0.2.0</event-engine-version>
         <jade-version>4.5.0</jade-version>
-        <commons-lang3-version>3.7</commons-lang3-version>
+        <commons-lang3-version>3.8</commons-lang3-version>
         <slf4j-version>1.8.0-beta2</slf4j-version>
         <jackson-version>2.9.6</jackson-version>
 
