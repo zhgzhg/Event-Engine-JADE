@@ -714,7 +714,7 @@ public class EventBrokerAgent extends Agent {
         this.bPingResponder = new BPingResponder(this, maxRequestsAtOnce);
 
         addBehaviour(this.bPingResponder);
-        addBehaviour(this.bEventBrokerAnnouncer = new BEventBrokerAnnouncer(this.yup, this.eventTopic));
+        addBehaviour(this.bEventBrokerAnnouncer = new BEventBrokerAnnouncer(this.yup, this.configuration));
         if (this.configuration.subscriberAliveCheckIntervalMillis > 0) {
             addBehaviour(new BSubscriberExistsChecker(
                     this, this.configuration.subscriberAliveCheckIntervalMillis, this::unsubscribeAIDForEvents
