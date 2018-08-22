@@ -19,6 +19,7 @@ import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.SubscriptionParameter;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.util.YellowPagesUtils;
 
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 
 /**
@@ -75,6 +76,8 @@ public class BEventBrokerSubscriber extends Behaviour {
 
     private boolean blocked = false;
     private long wakeupTime = 0;
+
+    protected Consumer<List<AID>> brokerAIDListPreparer;
 
     protected static final String PING_PROTOCOL_NAME = "event-engine-ping";
     protected static final String PING_REQUEST = "ping";
@@ -382,6 +385,11 @@ public class BEventBrokerSubscriber extends Behaviour {
         if (!agents.isEmpty()) {
             final AID myAID = agent.getAID();
 
+            if (this.brokerAIDListPreparer != null) {
+                this.brokerAIDListPreparer.accept(agents);
+                if (agents.isEmpty()) return;
+            }
+
             // The current agent is broker too. No need to execute more queries since we mustn't subscribe to ourselves.
             if (agents.size() == 1 && agents.get(0).equals(myAID)) {
                 return;
@@ -595,6 +603,22 @@ public class BEventBrokerSubscriber extends Behaviour {
         synchronized (this) {
             this.maxResponseWaitTimeMillis = maxResponseWaitTimeMillis;
         }
+    }
+
+    /**
+     * Returns the current value of the external AID preparer, executed just before the subscription process.
+     * @return The current value of the external AID preparer. Can be null.
+     */
+    public Consumer<List<AID>> getBrokerAIDListPreparer() {
+        return brokerAIDListPreparer;
+    }
+
+    /**
+     * Sets the current value of the external AID preparer, executed just before the subscription process.
+     * @param brokerAIDListPreparer The new value of the external AID preparer. Can be null.
+     */
+    public void setBrokerAIDListPreparer(Consumer<List<AID>> brokerAIDListPreparer) {
+        this.brokerAIDListPreparer = brokerAIDListPreparer;
     }
 
     @Override
