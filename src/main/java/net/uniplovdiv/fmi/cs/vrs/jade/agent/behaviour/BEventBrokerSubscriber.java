@@ -446,9 +446,12 @@ public class BEventBrokerSubscriber extends Behaviour {
                             setChosenEventSourceAgent(sp[i]);
                             this.lastFailedSubscrProviders.clear();
                             break;
-                        } else if (subscriptionAlternatives.stream().noneMatch(sd -> sd.getName().equals(sp[i]))) {
+                        }
+
+                        final int j = i;
+                        if (subscriptionAlternatives.stream().noneMatch(sd -> sd.getName().equals(sp[j]))) {
                             // maintain the least favourite alternatives by leaving those that're still online now
-                            this.lastFailedSubscrProviders.remove(sp[i]);
+                            this.lastFailedSubscrProviders.remove(sp[j]);
                         }
                     }
                 }
