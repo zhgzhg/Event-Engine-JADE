@@ -7,6 +7,7 @@ import jade.core.AID;
 import jade.core.Agent;
 import jade.core.ContainerID;
 import jade.core.behaviours.*;
+import jade.domain.FIPAAgentManagement.DFAgentDescription;
 import jade.domain.FIPANames;
 import jade.domain.JADEAgentManagement.JADEManagementOntology;
 import jade.domain.JADEAgentManagement.WhereIsAgentAction;
@@ -21,6 +22,7 @@ import net.uniplovdiv.fmi.cs.vrs.jade.agent.util.YellowPagesUtils;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 /**
  * Implementation of behaviour subscribing a particular agent for events. Once started it will persists and continuously
@@ -77,7 +79,7 @@ public class BEventBrokerSubscriber extends Behaviour {
     private boolean blocked = false;
     private long wakeupTime = 0;
 
-    protected Consumer<List<AID>> brokerAIDListPreparer;
+    protected Consumer<List<DFAgentDescription>> brokerListPreparer;
 
     protected static final String PING_PROTOCOL_NAME = "event-engine-ping";
     protected static final String PING_REQUEST = "ping";
@@ -380,28 +382,29 @@ public class BEventBrokerSubscriber extends Behaviour {
 
         Agent agent = getAgent();
 
-        List<AID> agents = this.yup.search();
+        List<DFAgentDescription> agentDescriptions = this.yup.searchEx();
 
-        if (!agents.isEmpty()) {
+        if (!agentDescriptions.isEmpty()) {
             final AID myAID = agent.getAID();
 
-            if (this.brokerAIDListPreparer != null) {
-                this.brokerAIDListPreparer.accept(agents);
-                if (agents.isEmpty()) return;
+            if (this.brokerListPreparer != null) {
+                this.brokerListPreparer.accept(agentDescriptions);
+                if (agentDescriptions.isEmpty()) return;
             }
 
             // The current agent is broker too. No need to execute more queries since we mustn't subscribe to ourselves.
-            if (agents.size() == 1 && agents.get(0).equals(myAID)) {
+            if (agentDescriptions.size() == 1 && agentDescriptions.get(0).getName().equals(myAID)) {
                 return;
             }
 
             String myContainerIdentifier =
                     this.retrieveContainerIdentifierOfAgent(myAID, this.maxResponseWaitTimeMillis);
 
-            final List<AID> subscriptionAlternatives = new ArrayList<>();
+            final List<DFAgentDescription> subscriptionAlternatives = new ArrayList<>();
 
-            for (AID a : agents) {
-                if (a.equals(myAID)) continue;
+            for (DFAgentDescription ad : agentDescriptions) {
+                AID a = ad.getName();
+                if (myAID.equals(a)) continue;
 
                 String contIdentifier = this.retrieveContainerIdentifierOfAgent(a, this.maxResponseWaitTimeMillis);
 
@@ -415,13 +418,14 @@ public class BEventBrokerSubscriber extends Behaviour {
                         this.lastFailedSubscrProviders.add(a);
                     }
                 } else {
-                    subscriptionAlternatives.add(a);
+                    subscriptionAlternatives.add(ad);
                 }
             }
 
 
             if (!hasSubscribed && !subscriptionAlternatives.isEmpty()) {
-                for (AID sa : subscriptionAlternatives) {
+                for (DFAgentDescription saad : subscriptionAlternatives) {
+                    AID sa = saad.getName();
                     if (lastFailedSubscrProviders.contains(sa)) continue; // leave recently failed providers for later
                     if (this.hasSubscribed = sendSubscribeToEventSourceMsg(sa, this.maxResponseWaitTimeMillis)) {
                         setChosenEventSourceAgent(sa);
@@ -442,7 +446,7 @@ public class BEventBrokerSubscriber extends Behaviour {
                             setChosenEventSourceAgent(sp[i]);
                             this.lastFailedSubscrProviders.clear();
                             break;
-                        } else if (!subscriptionAlternatives.contains(sp[i])) {
+                        } else if (subscriptionAlternatives.stream().noneMatch(sd -> sd.getName().equals(sp[i]))) {
                             // maintain the least favourite alternatives by leaving those that're still online now
                             this.lastFailedSubscrProviders.remove(sp[i]);
                         }
@@ -606,19 +610,21 @@ public class BEventBrokerSubscriber extends Behaviour {
     }
 
     /**
-     * Returns the current value of the external AID preparer, executed just before the subscription process.
-     * @return The current value of the external AID preparer. Can be null.
+     * Returns the current value of the external {@link DFAgentDescription} preparer, executed just before the
+     * subscription process.
+     * @return The current value of the external {@link DFAgentDescription} preparer. Can be null.
      */
-    public Consumer<List<AID>> getBrokerAIDListPreparer() {
-        return brokerAIDListPreparer;
+    public Consumer<List<DFAgentDescription>> getBrokerListPreparer() {
+        return brokerListPreparer;
     }
 
     /**
-     * Sets the current value of the external AID preparer, executed just before the subscription process.
-     * @param brokerAIDListPreparer The new value of the external AID preparer. Can be null.
+     * Sets the current value of the external {@link DFAgentDescription} preparer, executed just before the subscription
+     * process.
+     * @param brokerListPreparer The new value of the external {@link DFAgentDescription} preparer. Can be null.
      */
-    public void setBrokerAIDListPreparer(Consumer<List<AID>> brokerAIDListPreparer) {
-        this.brokerAIDListPreparer = brokerAIDListPreparer;
+    public void setBrokerListPreparer(Consumer<List<DFAgentDescription>> brokerListPreparer) {
+        this.brokerListPreparer = brokerListPreparer;
     }
 
     @Override
