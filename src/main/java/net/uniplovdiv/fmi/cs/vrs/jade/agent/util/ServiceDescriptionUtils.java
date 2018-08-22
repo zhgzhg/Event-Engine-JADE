@@ -27,6 +27,12 @@ public class ServiceDescriptionUtils {
      */
     public static final String EVENT_TOPIC_PROP = "event-topic";
     /**
+     * The property name containing integer in milliseconds value of the time the particular agent broker can tolerate
+     * the lack of connection to the actual broker system(s).
+     */
+    public static final String MAX_TIME_WITHOUT_BROKER_CONNECTION_MILLIS_PROP =
+            "max-time-without-broker-connection-millis";
+    /**
      * Property to be used in the directory facilitator to indicate that the event source accepts new subscribers.
      * For corresponding values see {@link #ACCEPT_NEW_SUBSCRIBERS_AFFIRMATIVE_ANS} and
      * {@link #ACCEPT_NEW_SUBSCRIBERS_NEGATIVE_ANS}.
