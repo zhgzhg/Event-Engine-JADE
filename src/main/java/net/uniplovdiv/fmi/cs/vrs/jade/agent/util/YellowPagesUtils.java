@@ -7,6 +7,7 @@ import jade.domain.FIPAAgentManagement.*;
 import jade.domain.FIPAException;
 import jade.lang.acl.ACLMessage;
 import jade.util.Logger;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -124,22 +125,33 @@ public class YellowPagesUtils {
     /**
      * Searches in Directory Facilitator for agents matching the service description, the current instance was
      * initialized with.
-     * @return List containing the agents matching the desired services. If nothing is found the list will be empty.
+     * @return List containing the agent descriptions. If nothing is found the list will be empty.
      */
-    public List<AID> search() {
-        List<AID> agents = new ArrayList<>();
+    public List<DFAgentDescription> searchEx() {
+        List<DFAgentDescription> agents = new ArrayList<>();
         try {
             DFAgentDescription template = new DFAgentDescription();
             template.addServices(this.sd);
             DFAgentDescription[] results = DFService.search(this.agent, template);
             if (results != null && results.length > 0) {
                 for (DFAgentDescription r : results) {
-                    agents.add(r.getName());
+                    agents.add(r);
                 }
             }
         } catch (Exception e) {
             Logger.getJADELogger(getClass().getName()).log(Level.SEVERE, e.getMessage(), e);
         }
+        return agents;
+    }
+
+    /**
+     * Searches in Directory Facilitator for agents matching the service description, the current instance was
+     * initialized with.
+     * @return List containing the agents matching the desired services. If nothing is found the list will be empty.
+     */
+    public List<AID> search() {
+        List<AID> agents = new ArrayList<>();
+        this.searchEx().forEach(agentDescr -> agents.add(agentDescr.getName()));
         return agents;
     }
 }
