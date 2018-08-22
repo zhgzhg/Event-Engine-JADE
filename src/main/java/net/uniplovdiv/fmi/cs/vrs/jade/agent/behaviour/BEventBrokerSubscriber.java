@@ -154,7 +154,7 @@ public class BEventBrokerSubscriber extends Behaviour {
     /**
      * Retrieves a pseudo-unique container identifier consisting of ContainerID name and port for a particular agent.
      * @param searchAgent The target agent ID to be searched for. Cannot be null.
-     * @param waitForResponseMillis TODO
+     * @param waitForResponseMillis The amount of time in milliseconds to wait for response from the AMS.
      * @return A nonempty string on success otherwise null.
      * @throws NullPointerException If searchAgent is null or if the failed to retrieve ContainerID parts.
      */
