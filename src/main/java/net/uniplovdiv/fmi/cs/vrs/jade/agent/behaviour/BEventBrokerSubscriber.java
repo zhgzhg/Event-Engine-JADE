@@ -20,7 +20,9 @@ import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.SubscriptionParameter;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.util.YellowPagesUtils;
 
 import java.util.*;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
 
@@ -76,10 +78,11 @@ public class BEventBrokerSubscriber extends Behaviour {
 
     private volatile long maxResponseWaitTimeMillis = 60000L;
 
+    protected volatile Consumer<List<DFAgentDescription>> brokerListPreparer;
+    protected volatile BiFunction<Long, Optional<DFAgentDescription>, Long> subscribeTimeoutCalculator;
+
     private boolean blocked = false;
     private long wakeupTime = 0;
-
-    protected Consumer<List<DFAgentDescription>> brokerListPreparer;
 
     protected static final String PING_PROTOCOL_NAME = "event-engine-ping";
     protected static final String PING_REQUEST = "ping";
@@ -370,6 +373,21 @@ public class BEventBrokerSubscriber extends Behaviour {
     }
 
     /**
+     * Computes the maximum timeout during the exact phase when this behaviour requires the subscription from the remote
+     * side
+     * @param ad The agent description of the agent to which subscription attempt will be made.
+     * @return A non-negative long value.
+     */
+    private long computeSubscribeTimeout(Optional<DFAgentDescription> ad) {
+        Long maxRespWaitTimeMillis = this.maxResponseWaitTimeMillis;
+        if (this.subscribeTimeoutCalculator != null) {
+            maxRespWaitTimeMillis = this.subscribeTimeoutCalculator.apply(maxRespWaitTimeMillis, ad);
+            if (maxRespWaitTimeMillis < 0) return this.maxResponseWaitTimeMillis;
+        }
+        return maxRespWaitTimeMillis.longValue();
+    }
+
+    /**
      * Searches for event source agents and tries to subscribe to one of them.
      */
     protected void sendSubscribeToEventSourceMsg() {
@@ -410,7 +428,8 @@ public class BEventBrokerSubscriber extends Behaviour {
 
                 // prefer agent within the same container if possible
                 if (myContainerIdentifier == null || myContainerIdentifier.equals(contIdentifier)) {
-                    if (this.hasSubscribed = sendSubscribeToEventSourceMsg(a, this.maxResponseWaitTimeMillis)) {
+                    if (this.hasSubscribed = sendSubscribeToEventSourceMsg(a,
+                            computeSubscribeTimeout(Optional.of(ad)))) {
                         setChosenEventSourceAgent(a);
                         this.lastFailedSubscrProviders.clear();
                         break;
@@ -427,7 +446,8 @@ public class BEventBrokerSubscriber extends Behaviour {
                 for (DFAgentDescription saad : subscriptionAlternatives) {
                     AID sa = saad.getName();
                     if (lastFailedSubscrProviders.contains(sa)) continue; // leave recently failed providers for later
-                    if (this.hasSubscribed = sendSubscribeToEventSourceMsg(sa, this.maxResponseWaitTimeMillis)) {
+                    if (this.hasSubscribed = sendSubscribeToEventSourceMsg(sa,
+                            computeSubscribeTimeout(Optional.of(saad)))) {
                         setChosenEventSourceAgent(sa);
                         this.lastFailedSubscrProviders.clear();
                         break;
@@ -441,15 +461,19 @@ public class BEventBrokerSubscriber extends Behaviour {
                 if (!this.hasSubscribed && !this.lastFailedSubscrProviders.isEmpty()) {
                     AID[] sp = (AID[]) this.lastFailedSubscrProviders.toArray();
                     for (int i = sp.length - 1; i != -1; i--) {
-                        if (!this.hasSubscribed && (this.hasSubscribed = sendSubscribeToEventSourceMsg(sp[i],
-                                this.maxResponseWaitTimeMillis))) {
-                            setChosenEventSourceAgent(sp[i]);
+                        final int j = i;
+
+                        Optional<DFAgentDescription> altAID = subscriptionAlternatives.stream()
+                                .filter(sa -> sa.getName().equals(sp[j])).findFirst();
+
+                        if (!this.hasSubscribed && (this.hasSubscribed = sendSubscribeToEventSourceMsg(sp[j],
+                                computeSubscribeTimeout(altAID)))) {
+                            setChosenEventSourceAgent(sp[j]);
                             this.lastFailedSubscrProviders.clear();
                             break;
                         }
 
-                        final int j = i;
-                        if (subscriptionAlternatives.stream().noneMatch(sd -> sd.getName().equals(sp[j]))) {
+                        if (!altAID.isPresent()) {
                             // maintain the least favourite alternatives by leaving those that're still online now
                             this.lastFailedSubscrProviders.remove(sp[j]);
                         }
@@ -628,6 +652,27 @@ public class BEventBrokerSubscriber extends Behaviour {
      */
     public void setBrokerListPreparer(Consumer<List<DFAgentDescription>> brokerListPreparer) {
         this.brokerListPreparer = brokerListPreparer;
+    }
+
+    /**
+     * Returns the current external calculator for broker subscribe request timeout, executed just before the
+     * subscription process.
+     * @return The current external calculator instance. Can be null.
+     */
+    public BiFunction<Long, Optional<DFAgentDescription>, Long> getSubscribeTimeoutCalculator() {
+        return subscribeTimeoutCalculator;
+    }
+
+    /**
+     * Sets the current external calculator for broker subscribe request timeout, executed just before the subscription
+     * process. The computation is done via {@link BiFunction} to which is passed the preferred timeout value, the
+     * description of the agent broker to which subscription attempt will be made, and needs to return the computed
+     * value, that if it's null will be ignored.
+     * @param subscribeTimeoutCalculator The calculator instance. Can be null.
+     */
+    public void setSubscribeTimeoutCalculator(
+            BiFunction<Long, Optional<DFAgentDescription>, Long> subscribeTimeoutCalculator) {
+        this.subscribeTimeoutCalculator = subscribeTimeoutCalculator;
     }
 
     @Override
