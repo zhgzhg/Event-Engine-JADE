@@ -382,7 +382,7 @@ public class BEventBrokerSubscriber extends Behaviour {
         Long maxRespWaitTimeMillis = this.maxResponseWaitTimeMillis;
         if (this.subscribeTimeoutCalculator != null) {
             maxRespWaitTimeMillis = this.subscribeTimeoutCalculator.apply(maxRespWaitTimeMillis, ad);
-            if (maxRespWaitTimeMillis < 0) return this.maxResponseWaitTimeMillis;
+            if (maxRespWaitTimeMillis == null || maxRespWaitTimeMillis < 0) return this.maxResponseWaitTimeMillis;
         }
         return maxRespWaitTimeMillis.longValue();
     }
@@ -429,7 +429,7 @@ public class BEventBrokerSubscriber extends Behaviour {
                 // prefer agent within the same container if possible
                 if (myContainerIdentifier == null || myContainerIdentifier.equals(contIdentifier)) {
                     if (this.hasSubscribed = sendSubscribeToEventSourceMsg(a,
-                            computeSubscribeTimeout(Optional.of(ad)))) {
+                            computeSubscribeTimeout(Optional.ofNullable(ad)))) {
                         setChosenEventSourceAgent(a);
                         this.lastFailedSubscrProviders.clear();
                         break;
@@ -447,7 +447,7 @@ public class BEventBrokerSubscriber extends Behaviour {
                     AID sa = saad.getName();
                     if (lastFailedSubscrProviders.contains(sa)) continue; // leave recently failed providers for later
                     if (this.hasSubscribed = sendSubscribeToEventSourceMsg(sa,
-                            computeSubscribeTimeout(Optional.of(saad)))) {
+                            computeSubscribeTimeout(Optional.ofNullable(saad)))) {
                         setChosenEventSourceAgent(sa);
                         this.lastFailedSubscrProviders.clear();
                         break;
