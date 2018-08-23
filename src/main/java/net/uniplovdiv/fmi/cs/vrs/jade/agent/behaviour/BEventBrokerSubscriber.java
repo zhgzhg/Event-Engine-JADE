@@ -610,7 +610,7 @@ public class BEventBrokerSubscriber extends Behaviour {
      * @param pingTimeoutMs A positive number (greater than 0) describing the time in milliseconds.
      * @throws IllegalArgumentException If pingTimeoutMs is less than 1.
      */
-    public void setPingTimeoutMsMs(long pingTimeoutMs) {
+    public void setPingTimeoutMs(long pingTimeoutMs) {
         this.pingTimeoutMs = pingTimeoutMs;
     }
 
