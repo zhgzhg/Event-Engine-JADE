@@ -301,6 +301,7 @@ public class EventBrokerAgent extends Agent {
 
             if (agent.isAIDSubscribed(sender)) {
                 reply.setPerformative(ACLMessage.AGREE);
+                return reply;
             } else {
                 SubscriptionParameter sp;
                 try {
@@ -341,13 +342,6 @@ public class EventBrokerAgent extends Agent {
                                     agent.send(reply);
                                 }
                         );
-
-                        /*if (agent.subscribeAIDForEvents(sender, sp)) {
-                            super.handleSubscription(subscription);
-                            reply.setPerformative(ACLMessage.AGREE);
-                        } else {
-                            reply.setPerformative(ACLMessage.REFUSE);
-                        }*/
                     }
                 } catch (Exception e) {
                     Logger.getJADELogger(this.getClass().getName()).log(Level.SEVERE, e.getMessage(), e);
@@ -356,7 +350,6 @@ public class EventBrokerAgent extends Agent {
                 }
             }
 
-            //return reply;
             return null;
         }
 
