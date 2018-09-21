@@ -59,6 +59,9 @@ import java.util.stream.Collectors;
  * }
  * </code>
  * </pre>
+ *
+ * The subscription process can be further tweaked if provided with nonnull {@link SubscriptionParameter}s. Please refer
+ * to the corresponding agent documentation what kind of parameters accepts.
  */
 public class BEventBrokerSubscriber extends Behaviour {
     private static final long serialVersionUID = -5345319310464473257L;
