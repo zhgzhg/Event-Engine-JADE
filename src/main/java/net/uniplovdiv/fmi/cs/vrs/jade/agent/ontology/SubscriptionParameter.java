@@ -73,7 +73,8 @@ public class SubscriptionParameter implements Concept {
 
     /**
      * Returns the current miscellaneous parameters (if any).
-     * @return Any possible value.
+     * Check the supported misc parameters for the corresponding agent.
+     * @return Any possible value incl. empty list.
      */
     @Slot(documentation = "Miscellaneous list of key - value parameters without fixed format",
             manageAsSerializable = true, name = "other-parameters", position = 2)
