@@ -6,15 +6,19 @@ import jade.core.behaviours.WakerBehaviour;
 import jade.domain.FIPAAgentManagement.DFAgentDescription;
 import jade.domain.FIPAAgentManagement.Property;
 import jade.domain.FIPAAgentManagement.ServiceDescription;
+import jade.util.leap.ArrayList;
 import jade.util.leap.Iterator;
 import net.uniplovdiv.fmi.cs.vrs.event.Event;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.EventBrokerAgent;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BEventBrokerSubscriber;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BEventChannel;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.EventEngineOntology;
+import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.HashableProperty;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.SubscriptionParameter;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.util.ServiceDescriptionUtils;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.util.YellowPagesUtils;
+
+import java.util.Arrays;
 
 /**
  * Sample, simple client agent to test event broker agents. Not a real unit test, yet...
@@ -31,8 +35,14 @@ public class EventClientAgent extends Agent {
 
             @Override
             protected void onWake() {
+                SubscriptionParameter sp = null;
+
+                // uncomment to achieve retroactivity - see {@link EventBrokerAgent}'s documentation.
+                // sp = new SubscriptionParameter();
+                // sp.setOtherParameters(Arrays.asList(new HashableProperty("beRetroactive", true)));
+
                 BEventBrokerSubscriber bbs = new BEventBrokerSubscriber(new YellowPagesUtils(getAgent(),
-                        ServiceDescriptionUtils.createEventSourceSD(null)), null);
+                        ServiceDescriptionUtils.createEventSourceSD(null)), sp);
 
                 // an example how to change the subscription timeout preference of the behaviour
                 // based on the info provided by the broker

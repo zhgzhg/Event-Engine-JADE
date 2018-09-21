@@ -31,6 +31,7 @@ import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BEventChannel;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BMessageGC;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.configuration.BasicConfiguration;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.EventEngineOntology;
+import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.HashableProperty;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.ontology.SubscriptionParameter;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.util.ServiceDescriptionUtils;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.util.YellowPagesUtils;
@@ -54,6 +55,10 @@ import java.util.logging.Level;
  * subscriber real connections to concrete broker systems and then relaying messages from and to those systems to the
  * subscriber agent and vice versa. Because of this approach a limitation on the number of subscribers is usually set.
  * The exact number depends of how many broker systems the broker agent will have to communicate with.
+ *
+ * During subscription the following {@link SubscriptionParameter}s are supported:
+ * Name: "beRetroactive", Values: {true, false}, Effect if true - The subscriber will be provided with all available
+ * events including those originating before the time of its first ever subscription.
  */
 public class EventBrokerAgent extends Agent {
     private static final long serialVersionUID = -4431769633058927649L;
@@ -75,6 +80,26 @@ public class EventBrokerAgent extends Agent {
     protected Function<SubscriptionParameter, Consumer<BasicConfiguration.Link>> configurationRemapper = (sp) -> {
         return (lnk) -> {
             if (lnk == null || (sp.getPersonalId() == null && sp.getPersonalId2() == null)) return;
+
+            {
+                List<HashableProperty> otherParameters = sp.getOtherParameters();
+                if (otherParameters != null) {
+                    for (HashableProperty hp : otherParameters) {
+                        if ("beRetroactive".equals(hp.getName())) {
+                            try {
+                                Boolean v = (Boolean)hp.getValue();
+                                if (v != null) {
+                                    lnk.beRetroactive = v.booleanValue();
+                                }
+                            } catch (Exception e) {
+                                logger.warning("Received incomplete subscription parameter 'beRetroactive' - " +
+                                        "must have a boolean value! Ignored!");
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
 
             Properties cfgData = lnk.getConfigurationData();
             Class<? extends AbstractEventDispatcher> aed = lnk.getAbstractEventDispatcher();
