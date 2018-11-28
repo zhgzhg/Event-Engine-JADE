@@ -26,7 +26,6 @@ import net.uniplovdiv.fmi.cs.vrs.event.dispatchers.brokers.AbstractEventDispatch
 import net.uniplovdiv.fmi.cs.vrs.event.dispatchers.brokers.activemq.EventDispatcherActiveMQ;
 import net.uniplovdiv.fmi.cs.vrs.event.dispatchers.brokers.kafka.EventDispatcherKafka;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BEventBrokerAnnouncer;
-import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BEventBrokerSubscriber;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BEventChannel;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.behaviour.BMessageGC;
 import net.uniplovdiv.fmi.cs.vrs.jade.agent.configuration.BasicConfiguration;
@@ -44,7 +43,6 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -272,6 +270,9 @@ public class EventBrokerAgent extends Agent {
         private static MessageTemplate unsubsRequest;
         private static MessageTemplate acceptedMessages;
 
+        // however explicit locking is also required for many of the operations done with the structure below
+        protected final Map<AID, ACLMessage> aidPendingSubscriptionReplyMessages = new ConcurrentHashMap<>();
+
         static {
             subsRequest = MessageTemplate.and(
                     MessageTemplate.MatchPerformative(ACLMessage.SUBSCRIBE),
@@ -312,66 +313,143 @@ public class EventBrokerAgent extends Agent {
             if (sender == null) return res;
 
             EventBrokerAgent agent = (EventBrokerAgent) getAgent();
-            agent.unsubscribeAIDForEvents(sender);
+
+            synchronized (aidPendingSubscriptionReplyMessages) {
+                aidPendingSubscriptionReplyMessages.remove(sender);
+                agent.unsubscribeAIDForEvents(sender);
+            }
 
             return res;
         }
 
+        private ACLMessage __handleSubscription(ACLMessage subscription) throws NotUnderstoodException,
+                RefuseException {
+            return super.handleSubscription(subscription);
+        }
+
         @Override
         protected ACLMessage handleSubscription(ACLMessage subscription) {
-            ACLMessage reply = subscription.createReply();
+            if (subscription == null) return null; // unlikely
+
             AID sender = subscription.getSender();
+            if (sender == null) return null; // unlikely
 
             EventBrokerAgent agent = (EventBrokerAgent) getAgent();
 
-            if (agent.isAIDSubscribed(sender)) {
-                reply.setPerformative(ACLMessage.AGREE);
-                return reply;
-            } else {
-                SubscriptionParameter sp;
-                try {
-                    ContentElement ce = agent.getContentManager().extractContent(subscription);
-                    Action act;
-                    if (ce instanceof Action
-                            && (((act = ((Action) ce)).getAction()) instanceof SubscriptionParameter)) {
-                        sp = (SubscriptionParameter) act.getAction();
+            // Refuse subscription if we are going in suspend (pause) or delete state
 
-                        if (sp == null) {
-                            sp = new SubscriptionParameter(UUID.randomUUID().toString(),
-                                    UUID.randomUUID().toString(), null);
-                        } else {
-                            if (sp.getPersonalId() == null || sp.getPersonalId().isEmpty())
-                                sp.setPersonalId(UUID.randomUUID().toString());
-                            if (sp.getPersonalId2() == null || sp.getPersonalId2().isEmpty())
-                                sp.setPersonalId2(UUID.randomUUID().toString());
-                        }
+            int state = agent.getState();
+            if (state == Agent.AP_SUSPENDED || state == Agent.AP_DELETED) {
+                synchronized (aidPendingSubscriptionReplyMessages) {
+                    aidPendingSubscriptionReplyMessages.remove(sender);
+                }
+                ACLMessage _reply = subscription.createReply();
+                _reply.setPerformative(ACLMessage.REFUSE);
+                return _reply;
+            }
 
-                        agent.subscribeAIDForEvents(sender, sp,
-                                (agent.configuration.maxTimeWithoutBrokerConnectionMillis > 0
-                                        ?
-                                        agent.configuration.maxTimeWithoutBrokerConnectionMillis
-                                        :
-                                        BasicConfiguration.DEFAULT_MAX_TIME_WITHOUT_BROKER_CONNECTION_MILLIS
-                                ),
-                                () -> {
+            // Handle existing or pending subscriptions
+
+            synchronized (aidPendingSubscriptionReplyMessages) {
+                if (aidPendingSubscriptionReplyMessages.containsKey(sender)) {
+                    // Another request arrives from the same subscriber. This meas that the subscriber has given up on
+                    // the previous one, so we use the new request instead.
+                    aidPendingSubscriptionReplyMessages.put(sender, subscription);
+                    return null;
+                }
+                if (agent.isAIDSubscribed(sender)) {
+                    ACLMessage _reply = subscription.createReply();
+                    _reply.setPerformative(ACLMessage.AGREE);
+                    return _reply;
+                } else {
+                    aidPendingSubscriptionReplyMessages.put(sender, subscription);
+                }
+            }
+
+            // Handle new subscriptions
+
+            SubscriptionParameter sp;
+            try {
+                ContentElement ce = agent.getContentManager().extractContent(subscription);
+                Action act;
+                if (ce instanceof Action
+                        && (((act = ((Action) ce)).getAction()) instanceof SubscriptionParameter)) {
+                    sp = (SubscriptionParameter) act.getAction();
+
+                    if (sp == null) {
+                        sp = new SubscriptionParameter(UUID.randomUUID().toString(),
+                                UUID.randomUUID().toString(), null);
+                    } else {
+                        if (sp.getPersonalId() == null || sp.getPersonalId().isEmpty())
+                            sp.setPersonalId(UUID.randomUUID().toString());
+                        if (sp.getPersonalId2() == null || sp.getPersonalId2().isEmpty())
+                            sp.setPersonalId2(UUID.randomUUID().toString());
+                    }
+
+                    agent.subscribeAIDForEvents(sender, sp,
+                            (agent.configuration.maxTimeWithoutBrokerConnectionMillis > 0
+                                    ?
+                                    agent.configuration.maxTimeWithoutBrokerConnectionMillis
+                                    :
+                                    BasicConfiguration.DEFAULT_MAX_TIME_WITHOUT_BROKER_CONNECTION_MILLIS
+                            ),
+                            () -> {
+                                synchronized (aidPendingSubscriptionReplyMessages) {
+                                    aidPendingSubscriptionReplyMessages.computeIfPresent(sender, (dst, reqMsg) -> {
+                                        if (reqMsg != null) {
+                                            ACLMessage reply;
+                                            try {
+                                                __handleSubscription(reqMsg);
+                                                reply = reqMsg.createReply();
+                                                reply.setPerformative(ACLMessage.AGREE);
+                                            } catch (Exception ex) {
+                                                reply = reqMsg.createReply();
+                                                reply.setPerformative(ACLMessage.REFUSE);
+                                            }
+                                            agent.send(reply);
+                                        }
+                                        return null;
+                                    });
+                                }
+                                /*ACLMessage realReply = aidPendingSubscriptionReplyMessages.remove(sender);
+                                if (realReply != null) {
                                     try {
                                         super.handleSubscription(subscription);
-                                        reply.setPerformative(ACLMessage.AGREE);
+                                        realReply.setPerformative(ACLMessage.AGREE);
                                     } catch (Exception ex) {
-                                        reply.setPerformative(ACLMessage.REFUSE);
+                                        realReply.setPerformative(ACLMessage.REFUSE);
                                     }
-                                    agent.send(reply);
-                                },
-                                () -> {
-                                    reply.setPerformative(ACLMessage.REFUSE);
-                                    agent.send(reply);
+                                    agent.send(realReply);
+                                }*/
+                            },
+                            () -> {
+                                synchronized (aidPendingSubscriptionReplyMessages) {
+                                    aidPendingSubscriptionReplyMessages.computeIfPresent(sender, (dst, reqMsg) -> {
+                                        if (reqMsg != null) {
+                                            ACLMessage reply = reqMsg.createReply();
+                                            reply.setPerformative(ACLMessage.REFUSE);
+                                            agent.send(reply);
+                                        }
+                                        return null;
+                                    });
                                 }
-                        );
+                                /*ACLMessage realReply = aidPendingSubscriptionReplyMessages.remove(sender);
+                                if (realReply != null) {
+                                    realReply.setPerformative(ACLMessage.REFUSE);
+                                    agent.send(realReply);
+                                }*/
+                            }
+                    );
+                }
+            } catch (Exception e) {
+                Logger.getJADELogger(this.getClass().getName()).log(Level.SEVERE, e.getMessage(), e);
+                synchronized (aidPendingSubscriptionReplyMessages) {
+                    ACLMessage reqMsg = aidPendingSubscriptionReplyMessages.remove(sender);
+                    if (reqMsg != null) {
+                        ACLMessage reply = reqMsg.createReply();
+                        reply.setPerformative(ACLMessage.REFUSE);
+                        return reply;
                     }
-                } catch (Exception e) {
-                    Logger.getJADELogger(this.getClass().getName()).log(Level.SEVERE, e.getMessage(), e);
-                    reply.setPerformative(ACLMessage.REFUSE);
-                    return reply;
                 }
             }
 
@@ -407,12 +485,44 @@ public class EventBrokerAgent extends Agent {
         public void remoteUnsubscribe(AID... subscriberAids) {
             if (subscriberAids != null && subscriberAids.length > 0) {
                 EventBrokerAgent agent = (EventBrokerAgent) getAgent();
-                sendUnsubscribedRemotelyMsg(agent, subscriberAids);
-                for (AID s : subscriberAids) {
-                    if (s != null) {
-                        agent.unsubscribeAIDForEvents(s);
+
+                synchronized (this.aidPendingSubscriptionReplyMessages) {
+                    for (AID s : subscriberAids) {
+                        if (s != null) {
+                            ACLMessage req = this.aidPendingSubscriptionReplyMessages.remove(s);
+                            if (req != null) {
+                                ACLMessage resp = req.createReply();
+                                resp.setPerformative(ACLMessage.REFUSE);
+                                agent.send(resp);
+                            } else {
+                                sendUnsubscribedRemotelyMsg(agent, s);
+                            }
+                            agent.unsubscribeAIDForEvents(s);
+                        }
                     }
                 }
+            }
+        }
+
+        /**
+         * Performs local unsubscribe action removing the corresponding AID from the register, any pending subscription
+         * requests and informs the remote side (subscriber for that).
+         * @param subscriberAids The agent identifier of the subscriber to unsubscribe and inform.
+         */
+        public void remoteUnsubscribeEveryone(AID... subscriberAids) {
+            EventBrokerAgent agent = (EventBrokerAgent) getAgent();
+
+            synchronized (this.aidPendingSubscriptionReplyMessages) {
+                remoteUnsubscribe(subscriberAids);
+                this.aidPendingSubscriptionReplyMessages.forEach((aid, reqMsg) -> {
+                   if (reqMsg != null) {
+                       ACLMessage reply = reqMsg.createReply();
+                       reply.setPerformative(ACLMessage.REFUSE);
+                       agent.send(reply);
+                   }
+                    agent.unsubscribeAIDForEvents(aid); // just in case
+                });
+                this.aidPendingSubscriptionReplyMessages.clear();
             }
         }
     }
@@ -776,10 +886,9 @@ public class EventBrokerAgent extends Agent {
                 sd.iterateOverConnections(c -> { if (c != null) c.close(); });
             }
         });
-
         // Inform registered agents that their events subscription is cancelled
-        BSubscriptionResponder.sendUnsubscribedRemotelyMsg(this,
-                this.agentToIdForBrokerMap.keySet().toArray(new AID[this.agentToIdForBrokerMap.keySet().size()]));
+        bSubscriptionResponder.remoteUnsubscribeEveryone(this.agentToIdForBrokerMap.keySet().toArray(
+                new AID[this.agentToIdForBrokerMap.keySet().size()]));
         this.agentToIdForBrokerMap.clear();
     }
 
