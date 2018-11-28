@@ -262,7 +262,8 @@ public class EventBrokerAgent extends Agent {
     }
 
     /**
-     * Responder for other agent's subscription requests.
+     * Responder for other agent's subscription requests. Designed to handle many requests including pending ones
+     * coming from the same or different senders.
      */
     protected static class BSubscriptionResponder extends SubscriptionResponder {
         private static final long serialVersionUID = -6017225801802881625L;
@@ -394,50 +395,31 @@ public class EventBrokerAgent extends Agent {
                                     BasicConfiguration.DEFAULT_MAX_TIME_WITHOUT_BROKER_CONNECTION_MILLIS
                             ),
                             () -> {
-                                synchronized (aidPendingSubscriptionReplyMessages) {
-                                    aidPendingSubscriptionReplyMessages.computeIfPresent(sender, (dst, reqMsg) -> {
-                                        if (reqMsg != null) {
-                                            ACLMessage reply;
-                                            try {
-                                                __handleSubscription(reqMsg);
-                                                reply = reqMsg.createReply();
-                                                reply.setPerformative(ACLMessage.AGREE);
-                                            } catch (Exception ex) {
-                                                reply = reqMsg.createReply();
-                                                reply.setPerformative(ACLMessage.REFUSE);
-                                            }
-                                            agent.send(reply);
+                                aidPendingSubscriptionReplyMessages.computeIfPresent(sender, (dst, reqMsg) -> {
+                                    if (reqMsg != null) {
+                                        ACLMessage reply;
+                                        try {
+                                            __handleSubscription(reqMsg);
+                                            reply = reqMsg.createReply();
+                                            reply.setPerformative(ACLMessage.AGREE);
+                                        } catch (Exception ex) {
+                                            reply = reqMsg.createReply();
+                                            reply.setPerformative(ACLMessage.REFUSE);
                                         }
-                                        return null;
-                                    });
-                                }
-                                /*ACLMessage realReply = aidPendingSubscriptionReplyMessages.remove(sender);
-                                if (realReply != null) {
-                                    try {
-                                        super.handleSubscription(subscription);
-                                        realReply.setPerformative(ACLMessage.AGREE);
-                                    } catch (Exception ex) {
-                                        realReply.setPerformative(ACLMessage.REFUSE);
+                                        agent.send(reply);
                                     }
-                                    agent.send(realReply);
-                                }*/
+                                    return null;
+                                });
                             },
                             () -> {
-                                synchronized (aidPendingSubscriptionReplyMessages) {
-                                    aidPendingSubscriptionReplyMessages.computeIfPresent(sender, (dst, reqMsg) -> {
-                                        if (reqMsg != null) {
-                                            ACLMessage reply = reqMsg.createReply();
-                                            reply.setPerformative(ACLMessage.REFUSE);
-                                            agent.send(reply);
-                                        }
-                                        return null;
-                                    });
-                                }
-                                /*ACLMessage realReply = aidPendingSubscriptionReplyMessages.remove(sender);
-                                if (realReply != null) {
-                                    realReply.setPerformative(ACLMessage.REFUSE);
-                                    agent.send(realReply);
-                                }*/
+                                aidPendingSubscriptionReplyMessages.computeIfPresent(sender, (dst, reqMsg) -> {
+                                    if (reqMsg != null) {
+                                        ACLMessage reply = reqMsg.createReply();
+                                        reply.setPerformative(ACLMessage.REFUSE);
+                                        agent.send(reply);
+                                    }
+                                    return null;
+                                });
                             }
                     );
                 }
