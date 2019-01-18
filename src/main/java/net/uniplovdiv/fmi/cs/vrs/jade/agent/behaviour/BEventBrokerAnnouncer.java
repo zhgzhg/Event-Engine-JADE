@@ -12,8 +12,8 @@ import net.uniplovdiv.fmi.cs.vrs.jade.agent.util.YellowPagesUtils;
 import java.util.Objects;
 
 /**
- * Delayed one-time announcer behaviour informing that a particul.
- * ar agent is an event distributor (broker).
+ * Delayed one-time announcer behaviour informing that a particular
+ * agent is an event distributor (broker).
  */
 public class BEventBrokerAnnouncer extends WakerBehaviour {
     private static final long serialVersionUID = -1373575430029846294L;
