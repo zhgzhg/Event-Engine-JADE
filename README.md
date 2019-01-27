@@ -65,5 +65,5 @@ How To Use
 At this point the examples are extremely limited, so please refer to the pom.xml file, the aforementioned profiles and dispatcher.properties file holding the default configuration of the event broker agent.
 
 First include the library into your project. Click on the download links at the top to see how.
-Then you will need an event broker agent (to run one check the pom.xml) connected a message broker system(s) (a quick and easy choice without any configuration is Apache ActiveMQ).
+Then you will need an event broker agent (to run one check the pom.xml) connected to a message broker system(s) (a quick and easy choice without any configuration is Apache ActiveMQ).
 Sample code for ordinary (client) agents (demonstrating only the basic capabilities of the library - how to send and receive events) can be found inside the pseudo test client agent.
