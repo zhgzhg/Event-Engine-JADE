@@ -1,7 +1,7 @@
 Event Engine for JADE
 =====================
 
-![build status badge](https://travis-ci.org/zhgzhg/Event-Engine-JADE.svg?branch=master "Build Status") [ ![Download](https://api.bintray.com/packages/zhgzhg/Event-Engine/Event-Engine-JADE/images/download.svg "Download Latest Version") ](https://bintray.com/zhgzhg/Event-Engine/Event-Engine-JADE/0.2.1)
+![build status badge](https://travis-ci.org/zhgzhg/Event-Engine-JADE.svg?branch=master "Build Status") [ ![Download](https://api.bintray.com/packages/zhgzhg/Event-Engine/Event-Engine-JADE/images/download.svg "Download Event Engine") ](https://bintray.com/zhgzhg/Event-Engine/Event-Engine-JADE/0.2.2)
 
 Library providing implementation for event broker agents, behaviours and event serialisation utilities used for
 distribution and receiving events inside multi-agent environments based on JADE (Java Agent DEvelopment Framework).
