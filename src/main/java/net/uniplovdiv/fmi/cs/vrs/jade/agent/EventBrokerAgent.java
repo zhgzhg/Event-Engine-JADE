@@ -1002,29 +1002,36 @@ public class EventBrokerAgent extends Agent {
                 try {
                     long ts = System.currentTimeMillis();
                     dispatchers = dispatchersCreatorTask.get(timeoutMs, TimeUnit.MILLISECONDS);
-                    if (dispatchers != null) {
-                        if (dispatchers.isEmpty()) {
-                            dispatchers = null;
-                        } else {
-                            // some message broker systems like Kafka don't block upon instantiation if there's no
-                            // connection established. We try to unify such behaviours here.
-                            for (Iterator<IEventDispatcher> it = dispatchers.iterator(); it.hasNext(); ) {
-                                IEventDispatcher d = it.next();
-                                if (!d.isConnected()) {
-                                    long slpDiff = System.currentTimeMillis() - ts;
-                                    if (slpDiff < timeoutMs) {
-                                        Thread.sleep(timeoutMs - slpDiff);
-                                    }
-                                }
-                                if (!d.isConnected())
-                                    throw new IllegalStateException("Some dispatchers not created!");
-                            }
+                    if (dispatchers != null && !dispatchers.isEmpty()) {
 
-                            if (isPastSubscriptionCapacity())
-                                throw new IllegalStateException("Subscription capacity surpassed");
+                        if (configuration.link.size() != dispatchers.size()) {
+                            throw new IllegalStateException("Only " + configuration.link.size() + " out of "
+                                    + dispatchers.size() + " dispatchers have been created/connected");
                         }
+
+                        // some message broker systems like Kafka don't block upon instantiation if there's no
+                        // connection established. We try to unify such behaviours here.
+                        for (Iterator<IEventDispatcher> it = dispatchers.iterator(); it.hasNext(); ) {
+                            IEventDispatcher d = it.next();
+                            if (!d.isConnected()) {
+                                long slpDiff = System.currentTimeMillis() - ts;
+                                if (slpDiff < timeoutMs) {
+                                    Thread.sleep(timeoutMs - slpDiff);
+                                }
+                            }
+                            if (!d.isConnected()) {
+                                throw new IllegalStateException(
+                                        "Dispatcher " + d.toString() + " failed to establish a connection!");
+                            }
+                        }
+
+                        if (isPastSubscriptionCapacity())
+                            throw new IllegalStateException("Subscription capacity surpassed");
+
+                    }  else {
+                        throw new NullPointerException("No dispatchers have been created");
                     }
-                    if (dispatchers == null) throw new NullPointerException("No dispatchers created");
+
                     if (!_subscriberData.setConnections(dispatchers)) {
                         throw new UnsupportedOperationException(
                                 "Denied setting dispatcher instances for a subscriber AID!" + aid.toString());
