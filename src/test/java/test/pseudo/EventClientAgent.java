@@ -83,7 +83,7 @@ public class EventClientAgent extends Agent {
                 Event event = Event.makeInstance(Event.class);
                 event.getDynamicParameters().put("sender-aid", getAID().toString());
                 bes.send(event);
-                System.out.println("Send event!");
+                System.out.println("Client agent attempted to send an event! Stand by for the results...");
             }
         });
     }

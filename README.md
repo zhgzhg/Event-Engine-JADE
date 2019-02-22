@@ -20,6 +20,9 @@ What's Provided
     * Announcement of event broker agents
     * Exchange of events via specialised channel
     * Garbage collection of agent messages
+* JADE helper utilities for working with:
+    * Service description
+    * Directory Facilitator / Yellow Pages
 
 
 Requirements
@@ -62,8 +65,11 @@ A very simple event client agent with the default event distribution agent can b
 How To Use
 ==========
 
-At this point the examples are extremely limited, so please refer to the pom.xml file, the aforementioned profiles and dispatcher.properties file holding the default configuration of the event broker agent.
+At this point the examples are extremely limited, so please refer to the pom.xml file, the aforementioned profiles and
+dispatcher.properties file holding the default configuration of the event broker agent.
 
 First include the library into your project. Click on the download links at the top to see how.
-Then you will need an event broker agent (to run one check the pom.xml) connected to a message broker system(s) (a quick and easy choice without any configuration is Apache ActiveMQ).
-Sample code for ordinary (client) agents (demonstrating only the basic capabilities of the library - how to send and receive events) can be found inside the pseudo test client agent.
+Then you will need an event broker agent (to run one check the pom.xml) connected to a message broker system(s) (a quick
+and easy choice without any configuration is Apache ActiveMQ). Sample code for ordinary (client) agents (demonstrating
+only the basic capabilities of the library - how to send and receive events) can be found inside the pseudo test client
+agent.

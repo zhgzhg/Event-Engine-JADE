@@ -227,7 +227,8 @@ public class BasicConfiguration {
      * Creates instances of the event dispatchers handling the relaying to the specified broker systems.
      * @param linkModifier Optional temporary modifier of the Link parameters data, used during the instantiation of
      *                     the corresponding dispatchers. Can be null.
-     * @param result Instance of the variable holding the results. Cannot be null.
+     * @param result Instance of the variable holding the results. Cannot be null. The result count might differ from
+     *               the one in {@link #link} in case of errors.
      * @throws NullPointerException If result is null.
      */
     protected void makeDispatchers(Consumer<Link> linkModifier, List<IEventDispatcher> result) {
@@ -276,7 +277,10 @@ public class BasicConfiguration {
      * Synchronously creates instances of the event dispatchers handling the relaying to the specified broker systems.
      * @param linkModifier Optional temporary modifier of the Link parameters data, used during the instantiation of
      *                     the corresponding dispatchers. Can be null.
-     * @return A list that might contain 0 or more instances.
+     * @return A list that might contain 0 or more instances. Because whether a dispatcher instance will be created and
+     *         added to the list are 2 separate independent actions, that however depend on the underlying broker system
+     *         implementation it is a good practice to compare the result count to that of the originally specified
+     *         {@link #link} entries.
      */
     public List<IEventDispatcher> makeDispatchers(Consumer<Link> linkModifier) {
         int sz = 1;
@@ -288,6 +292,7 @@ public class BasicConfiguration {
 
     /**
      * Asynchronously creates instances of the event dispatchers handling the relaying to the specified broker systems.
+     * For the complete check {@link #makeDispatchers(Consumer)} method.
      * @param linkModifier Optional temporary modifier of the Link parameters data, used during the instantiation of
      *                     the corresponding dispatchers. Can be null.
      * @param result Instance of the variable holding the results. Using {@link Collections#synchronizedList(List)}
