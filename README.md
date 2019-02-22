@@ -21,7 +21,7 @@ What's Provided
     * Exchange of events via specialised channel
     * Garbage collection of agent messages
 * JADE helper utilities for working with:
-    * Service description
+    * Service descriptions
     * Directory Facilitator / Yellow Pages
 
 
