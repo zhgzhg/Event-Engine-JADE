@@ -28,6 +28,7 @@ sed -i "/<profiles>/ a\
 <activeProfiles>\
     <activeProfile>bintray</activeProfile>\
 </activeProfiles>" ~/.m2/settings.xml
+cat ~/.m2/settings.xml
 
 
 
