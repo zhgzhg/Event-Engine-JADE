@@ -22,11 +22,10 @@ sed -i "/<profiles>/ a\
             </pluginRepository>\
         </pluginRepositories>\
         <id>bintray</id>\
-    </profile>\
-</profiles>\
-<activeProfiles>\
-    <activeProfile>bintray</activeProfile>\
-</activeProfiles>" ~/.m2/settings.xml
+        <activation>\
+            <activeByDefault>true</activeByDefault>\
+        </activation>\
+    </profile>" ~/.m2/settings.xml
 cat ~/.m2/settings.xml
 
 
