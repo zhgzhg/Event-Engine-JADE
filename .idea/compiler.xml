@@ -17,7 +17,7 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <processorPath useClasspath="false">
-          <entry name="$MAVEN_REPOSITORY$/com/github/zhgzhg/ee-annotations/0.2.2/ee-annotations-0.2.2.jar" />
+          <entry name="$MAVEN_REPOSITORY$/com/github/zhgzhg/ee-annotations/0.2.3/ee-annotations-0.2.3.jar" />
           <entry name="$MAVEN_REPOSITORY$/org/apache/commons/commons-lang3/3.8.1/commons-lang3-3.8.1.jar" />
         </processorPath>
         <module name="EventEngineJADE" />
