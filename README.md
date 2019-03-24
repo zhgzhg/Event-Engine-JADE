@@ -1,7 +1,7 @@
 Event Engine for JADE
 =====================
 
-![build status badge](https://travis-ci.org/zhgzhg/Event-Engine-JADE.svg?branch=master "Build Status") [ ![Download](https://api.bintray.com/packages/zhgzhg/Event-Engine/Event-Engine-JADE/images/download.svg "Download Event Engine") ](https://bintray.com/zhgzhg/Event-Engine/Event-Engine-JADE/0.2.2)
+![build status badge](https://travis-ci.org/zhgzhg/Event-Engine-JADE.svg?branch=master "Build Status") [ ![Download](https://api.bintray.com/packages/zhgzhg/Event-Engine/Event-Engine-JADE/images/download.svg "Download Event Engine") ](https://bintray.com/zhgzhg/Event-Engine/Event-Engine-JADE/0.2.3)
 
 Library providing implementation for event broker agents, behaviours and event serialisation utilities used for
 distribution and receiving events inside multi-agent environments based on JADE (Java Agent DEvelopment Framework).
@@ -40,12 +40,12 @@ Compilation
 * With Maven (recommended):
     * Execute `mvn clean install -P java8`
 * With IntelliJ IDEA: 
-    * Open the project and build it using the GUI options. (no profiles for jar artefacts)
+    * Open the project and build it using the GUI options. (no profiles for jar artifacts)
 
 ### For Java 9+ - beta, limited modularization:
 * With Maven (recommended):
     * Execute `mvn clean install -P java9p`
-* With IntelliJ IDEA (no profiles for jar artefacts):
+* With IntelliJ IDEA (no profiles for jar artifacts):
     * Open the project.
     * In project's settings specify Project JDK to be JDK9 
     * For every module copy the file module-info.java inside its java directory.
