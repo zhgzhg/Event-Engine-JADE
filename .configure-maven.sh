@@ -6,6 +6,11 @@ sed -i "/<profiles>/ a\
                 <snapshots>\
                     <enabled>false</enabled>\
                 </snapshots>\
+                <releases>\
+                    <enabled>true</enabled>\
+                    <updatePolicy>always</updatePolicy>\
+                    <checksumPolicy>warn</checksumPolicy>\
+                </releases>\
                 <id>bintray-zhgzhg-Event-Engine</id>\
                 <name>bintray</name>\
                 <url>https://dl.bintray.com/zhgzhg/Event-Engine</url>\
@@ -16,6 +21,11 @@ sed -i "/<profiles>/ a\
                 <snapshots>\
                     <enabled>false</enabled>\
                 </snapshots>\
+                <releases>\
+                    <enabled>true</enabled>\
+                    <updatePolicy>always</updatePolicy>\
+                    <checksumPolicy>warn</checksumPolicy>\
+                </releases>\
                 <id>bintray-zhgzhg-Event-Engine</id>\
                 <name>bintray-plugins</name>\
                 <url>https://dl.bintray.com/zhgzhg/Event-Engine</url>\
