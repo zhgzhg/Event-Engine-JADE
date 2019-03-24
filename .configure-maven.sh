@@ -1,6 +1,5 @@
 #!/bin/bash
 sed -i "/<profiles>/ a\
-<profiles>\
     <profile>\
         <repositories>\
             <repository>\
