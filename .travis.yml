@@ -15,4 +15,4 @@ jdk:
   - openjdk12
   - openjdk-ea
 before_install:
-  - bash ./configure-maven.sh
+  - bash ./.configure-maven.sh
