@@ -14,8 +14,3 @@ jdk:
   - openjdk11
   - openjdk12
   - openjdk-ea
-before_install:
-  - wget http://apache.mirror.gtcomm.net/maven/maven-3/3.6.0/binaries/apache-maven-3.6.0-bin.tar.gz
-  - tar xzvf apache-maven-3.6.0-bin.tar.gz
-  - export PATH=`pwd`/apache-maven-3.6.0/bin:$PATH
-  - bash ./.configure-maven.sh
