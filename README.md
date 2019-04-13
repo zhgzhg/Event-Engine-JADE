@@ -5,9 +5,10 @@ Event Engine for JADE
 
 Library providing implementation for event broker agents, behaviours and event serialisation utilities used for
 distribution and receiving events inside multi-agent environments based on JADE (Java Agent DEvelopment Framework).
-This project utilises [Event Engine](https://github.com/zhgzhg/Event-Engine "Event Engine") library - the core component
-used to represent events. Every other agent that's interested to use such events is also required to integrate the
-library (usually through Event-Engine-JADE) in order to be able to interpret the received event data.
+
+This project utilises the [Event Engine](https://github.com/zhgzhg/Event-Engine "Event Engine") library which is
+the core component used to represent events. Every other agent that is interested to use such events is also
+required to integrate it (usually via Event-Engine-JADE) in order to be able to interpret the received event data.
 
 The project is distributed under LGPLv3 or later license.
 
@@ -47,7 +48,7 @@ Compilation
     * Execute `mvn clean install -P java9p`
 * With IntelliJ IDEA (no profiles for jar artifacts):
     * Open the project.
-    * In project's settings specify Project JDK to be JDK9 
+    * In project's settings specify Project JDK to be JDK9 or later
     * For every module copy the file module-info.java inside its java directory.
 
 
