@@ -16,7 +16,7 @@
 
     <groupId>com.github.zhgzhg</groupId>
     <artifactId>event-engine-jade</artifactId>
-    <version>0.2.3</version>
+    <version>0.2.4</version>
     <packaging>jar</packaging>
 
     <url>https://github.com/zhgzhg/Event-Engine-JADE</url>
@@ -50,9 +50,9 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <event-engine-version>0.2.3</event-engine-version>
+        <event-engine-version>0.2.4</event-engine-version>
         <jade-version>4.5.0</jade-version>
-        <commons-lang3-version>3.8.1</commons-lang3-version>
+        <commons-lang3-version>3.9</commons-lang3-version>
         <slf4j-version>1.8.0-beta4</slf4j-version>
         <jackson-version>2.9.8</jackson-version>
 
