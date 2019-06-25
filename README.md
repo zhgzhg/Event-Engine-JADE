@@ -1,16 +1,22 @@
 Event Engine for JADE
 =====================
-
-![build status badge](https://travis-ci.org/zhgzhg/Event-Engine-JADE.svg?branch=master "Build Status") [ ![Download](https://api.bintray.com/packages/zhgzhg/Event-Engine/Event-Engine-JADE/images/download.svg "Download Event Engine") ](https://bintray.com/zhgzhg/Event-Engine/Event-Engine-JADE/0.2.4)
+<img alt="Event Engine for JADE Logo" src="https://raw.githubusercontent.com/zhgzhg/Event-Engine-JADE/master/logo.svg?sanitize=true" height="160" width="160"/>
 
 Library providing implementation for event broker agents, behaviours and event serialisation utilities used for
-distribution and receiving events inside multi-agent environments based on JADE (Java Agent DEvelopment Framework).
+distribution and receiving events inside multi-agent environments based on
+[JADE (Java Agent DEvelopment Framework)](https://jade.tilab.com/ "JADE website")
+
+![build status badge](https://travis-ci.org/zhgzhg/Event-Engine-JADE.svg?branch=master "Build Status")
+[ ![Download](https://api.bintray.com/packages/zhgzhg/Event-Engine/Event-Engine-JADE/images/download.svg "Download Event Engine for JADE") ](https://bintray.com/zhgzhg/Event-Engine/Event-Engine-JADE/0.2.5)
+
 
 This project utilises the [Event Engine](https://github.com/zhgzhg/Event-Engine "Event Engine") library which is
 the core component used to represent events. Every other agent that is interested to use such events is also
-required to integrate it (usually via Event-Engine-JADE) in order to be able to interpret the received event data.
+required to integrate it (usually via
+[Event-Engine-JADE](https://github.com/zhgzhg/Event-Engine-JADE "Event Engine for JADE")) in order to be able
+to interpret the received event data.
 
-The project is distributed under LGPLv3 or later license.
+The project is distributed under LGPLv3 license or its later versions.
 
 
 What's Provided
