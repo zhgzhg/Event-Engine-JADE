@@ -2,3 +2,4 @@ out
 target
 MTPs-*.txt
 AP*.txt
+.idea/sonarlint

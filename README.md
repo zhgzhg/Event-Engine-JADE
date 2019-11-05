@@ -6,7 +6,7 @@ Library providing implementation for event broker agents, behaviours and event s
 distribution and receiving events inside multi-agent environments based on
 [JADE (Java Agent DEvelopment Framework)](https://jade.tilab.com/ "JADE website")
 
-![build status badge](https://travis-ci.org/zhgzhg/Event-Engine-JADE.svg?branch=master "Build Status")
+![build status badge](https://travis-ci.com/zhgzhg/Event-Engine-JADE.svg?branch=master "Build Status")
 [ ![Download](https://api.bintray.com/packages/zhgzhg/Event-Engine/Event-Engine-JADE/images/download.svg "Download Event Engine for JADE") ](https://bintray.com/zhgzhg/Event-Engine/Event-Engine-JADE/0.2.5)
 
 
