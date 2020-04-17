@@ -36,7 +36,7 @@ Requirements
 ------------
 
 * Java 8+
-* Maven 3.3.9+ or IntelliJ IDEA 2018.1+
+* Maven 3.6.2+ or IntelliJ IDEA 2019.1+
 * JADE v4.5.0+ (older versions might work too, not tested)
 
 
