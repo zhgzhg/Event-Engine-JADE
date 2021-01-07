@@ -1192,7 +1192,7 @@ public class EventBrokerAgent extends Agent {
 
     /**
      * Removes Agent ID from the internal "list" of agents that are going to be informed for events and also informs
-     * the Agent ID that has been unsubcribed "remotely".
+     * the Agent ID that has been unsubscribed "remotely".
      * @param aid The agent id to be removed.
      */
     public void unsubscribeAIDForEventsAndInform(AID aid) {
