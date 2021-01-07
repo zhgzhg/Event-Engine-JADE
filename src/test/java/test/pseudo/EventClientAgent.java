@@ -1,6 +1,7 @@
 package test.pseudo;
 
 import jade.core.Agent;
+import jade.core.Location;
 import jade.core.behaviours.ThreadedBehaviourFactory;
 import jade.core.behaviours.WakerBehaviour;
 import jade.domain.FIPAAgentManagement.DFAgentDescription;
@@ -25,7 +26,7 @@ import java.util.Arrays;
  */
 public class EventClientAgent extends Agent {
     private static final long serialVersionUID = 3538576756834034664L;
-    private ThreadedBehaviourFactory tbf = new ThreadedBehaviourFactory();
+    private transient ThreadedBehaviourFactory tbf = new ThreadedBehaviourFactory();
     private SubscriptionParameter sp = new SubscriptionParameter();
 
     @Override
@@ -86,6 +87,15 @@ public class EventClientAgent extends Agent {
                 System.out.println("Client agent attempted to send an event! Stand by for the results...");
             }
         });
+    }
+
+    @Override
+    public void doMove(Location destination) {
+        try {
+            takeDown();
+        } catch (Exception e) {}
+        super.doMove(destination);
+        this.tbf = null;
     }
 
     @Override

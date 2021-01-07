@@ -151,7 +151,7 @@
                             <arguments>
                                 <argument>-gui</argument>
                                 <argument>-agents</argument>
-                                <argument>EventClientAgent0:test.pseudo1.EventClientAgent;EventBrokerAgent0:net.uniplovdiv.fmi.cs.vrs.jade.agent.EventBrokerAgent(--config=${project.build.outputDirectory}/dispatcher.properties)</argument>
+                                <argument>EventClientAgent0:test.pseudo.EventClientAgent;EventBrokerAgent0:net.uniplovdiv.fmi.cs.vrs.jade.agent.EventBrokerAgent(--config=${project.build.outputDirectory}/dispatcher.properties)</argument>
                             </arguments>
                         </configuration>
                         <executions>
